@@ -49,7 +49,7 @@ public class MagicDataService {
     private Mono<MagicsResponse> buildFullSnapshot(String fallbackVersion, boolean requiresRefresh) {
         return Mono.zip(
                         magicRepository.findAll().collectList(),
-                        magicQueryRepository.findAllWithManaCostAndAimShape().collectList())
+                        magicQueryRepository.findAllWithManaCostAndIndicator().collectList())
                 .map(tuple -> {
                     List<Magic> magics = tuple.getT1();
                     if (magics.isEmpty()) {
@@ -64,10 +64,9 @@ public class MagicDataService {
                                 MagicListRow row = rowsById.get(magic.getId());
                                 Integer manaCost = row != null && row.manaCost() != null
                                         ? row.manaCost().intValue() : null;
-                                Integer aimShape = row != null && row.aimShape() != null
-                                        ? row.aimShape().intValue() : null;
+                                String indicator = row != null ? row.indicator() : null;
                                 return new MagicDto(magic.getId(), magic.getName(), magic.getElement(),
-                                        manaCost, aimShape);
+                                        manaCost, indicator);
                             })
                             .collect(Collectors.toList());
 

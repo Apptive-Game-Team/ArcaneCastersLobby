@@ -44,10 +44,11 @@ class MagicDataServiceTest {
                 .thenReturn(Flux.just(changedMagic));
         when(magicRepository.findAll())
                 .thenReturn(Flux.just(unchangedMagic, changedMagic));
-        when(magicQueryRepository.findAllWithManaCostAndAimShape())
+        when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(
-                        new MagicListRow(10L, "fireball", "Fire", 15.0, 1.0),
-                        new MagicListRow(20L, "ice_wall", "Water", 20.0, 0.0)
+                        new MagicListRow(10L, "fireball", "Fire", 15.0,
+                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"),
+                        new MagicListRow(20L, "ice_wall", "Water", 20.0, null)
                 ));
 
         StepVerifier.create(magicDataService.getMagics(currentVersion))
@@ -67,8 +68,9 @@ class MagicDataServiceTest {
 
         when(magicRepository.findAll())
                 .thenReturn(Flux.just(magic));
-        when(magicQueryRepository.findAllWithManaCostAndAimShape())
-                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", "Fire", 15.0, 1.0)));
+        when(magicQueryRepository.findAllWithManaCostAndIndicator())
+                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", "Fire", 15.0,
+                        "{\"version\":1,\"layers\":[]}")));
 
         StepVerifier.create(magicDataService.getMagics(null))
                 .assertNext(response -> {
@@ -103,12 +105,13 @@ class MagicDataServiceTest {
                         && magic.name().equals("fireball")
                         && magic.element().equals("Fire")
                         && magic.manaCost().equals(15)
-                        && magic.aimShape().equals(1));
+                        && magic.indicator().equals(
+                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"));
         assert response.magics().stream().anyMatch(magic ->
                 magic.id().equals(20L)
                         && magic.name().equals("ice_wall")
                         && magic.element().equals("Water")
                         && magic.manaCost().equals(20)
-                        && magic.aimShape().equals(0));
+                        && magic.indicator() == null);
     }
 }
