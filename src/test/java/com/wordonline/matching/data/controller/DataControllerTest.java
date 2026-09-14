@@ -35,7 +35,12 @@ class DataControllerTest {
     @Test
     @DisplayName("마법_전체_조회_버전없음_성공")
     void getMagics_WithoutVersion_ReturnsAllMagics() {
-        MagicDto magicDto = new MagicDto(1L, "fireball", "shoot", List.of("Fire", "Fire", "Shoot"));
+        // indicator is a pass-through jsonb document (see MagicDto), so it must not be
+        // asserted through a typed getter: it never round-trips back into a String field.
+        // The response body is checked as raw JSON instead, confirming the document comes
+        // back as an inline JSON object rather than an escaped string.
+        String indicatorJson = "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}";
+        MagicDto magicDto = new MagicDto(1L, "fireball", "shoot", List.of("Fire", "Fire", "Shoot"), indicatorJson);
         MagicsResponse mockResponse = new MagicsResponse("2024-01-01T00:00:00", List.of(magicDto), true);
 
         when(magicDataService.getMagics(isNull())).thenReturn(Mono.just(mockResponse));
@@ -46,16 +51,36 @@ class DataControllerTest {
                 .uri("/api/data/magics")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(MagicsResponse.class)
-                .value(response -> {
-                    assert response.version().equals("2024-01-01T00:00:00");
-                    assert response.magics().size() == 1;
-                    assert response.magics().get(0).id().equals(1L);
-                    assert response.magics().get(0).name().equals("fireball");
-                    assert response.magics().get(0).castType().equals("shoot");
-                    assert response.magics().get(0).cards().equals(List.of("Fire", "Fire", "Shoot"));
-                    assert response.requiresRefresh();
-                });
+                .expectBody()
+                .jsonPath("$.version").isEqualTo("2024-01-01T00:00:00")
+                .jsonPath("$.magics.length()").isEqualTo(1)
+                .jsonPath("$.magics[0].id").isEqualTo(1)
+                .jsonPath("$.magics[0].name").isEqualTo("fireball")
+                .jsonPath("$.magics[0].castType").isEqualTo("shoot")
+                .jsonPath("$.magics[0].cards[0]").isEqualTo("Fire")
+                .jsonPath("$.magics[0].cards[2]").isEqualTo("Shoot")
+                .jsonPath("$.magics[0].indicator.version").isEqualTo(1)
+                .jsonPath("$.magics[0].indicator.layers[0].shape").isEqualTo("circle")
+                .jsonPath("$.magics[0].indicator.layers[0].radius.parameter").isEqualTo("radius")
+                .jsonPath("$.requiresRefresh").isEqualTo(true);
+    }
+
+    @Test
+    @DisplayName("마법_조회_indicator_없음_null로_반환")
+    void getMagics_WithoutIndicator_ReturnsJsonNull() {
+        MagicDto magicDto = new MagicDto(2L, "ice_wall", "build", List.of("Water"), null);
+        MagicsResponse mockResponse = new MagicsResponse("2024-01-01T00:00:00", List.of(magicDto), true);
+
+        when(magicDataService.getMagics(isNull())).thenReturn(Mono.just(mockResponse));
+
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockJwt().jwt(jwt -> jwt.claim("memberId", "1")))
+                .get()
+                .uri("/api/data/magics")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.magics[0].indicator").isEqualTo(null);
     }
 
     @Test

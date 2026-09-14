@@ -58,10 +58,11 @@ class MagicDataServiceTest {
                 .thenReturn(Flux.just(changedMagicCard));
         when(magicCardRepository.findAll())
                 .thenReturn(Flux.just(fullFireballCardOne, fullFireballCardTwo, fullIceWallCard));
+        String fireballIndicator = "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}";
         when(magicRepository.findAllById(List.of(10L, 20L)))
                 .thenReturn(Flux.just(
-                        new Magic(10L, "fireball", "shoot"),
-                        new Magic(20L, "ice_wall", "build")
+                        new Magic(10L, "fireball", "shoot", fireballIndicator),
+                        new Magic(20L, "ice_wall", "build", null)
                 ));
         when(cardRepository.findAllById(List.of(100L, 101L, 200L)))
                 .thenReturn(Flux.just(fireCard, shootCard, waterCard));
@@ -85,7 +86,7 @@ class MagicDataServiceTest {
         when(magicCardRepository.findAll())
                 .thenReturn(Flux.just(magicCard));
         when(magicRepository.findAllById(List.of(10L)))
-                .thenReturn(Flux.just(new Magic(10L, "fireball", "shoot")));
+                .thenReturn(Flux.just(new Magic(10L, "fireball", "shoot", null)));
         when(cardRepository.findAllById(List.of(100L)))
                 .thenReturn(Flux.just(fireCard));
 
@@ -128,11 +129,14 @@ class MagicDataServiceTest {
                 magic.id().equals(10L)
                         && magic.name().equals("fireball")
                         && magic.castType().equals("shoot")
-                        && magic.cards().equals(List.of("Fire", "Shoot")));
+                        && magic.cards().equals(List.of("Fire", "Shoot"))
+                        && magic.indicator().equals(
+                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"));
         assert response.magics().stream().anyMatch(magic ->
                 magic.id().equals(20L)
                         && magic.name().equals("ice_wall")
                         && magic.castType().equals("build")
-                        && magic.cards().equals(List.of("Water")));
+                        && magic.cards().equals(List.of("Water"))
+                        && magic.indicator() == null);
     }
 }

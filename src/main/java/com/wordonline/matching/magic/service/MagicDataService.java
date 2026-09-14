@@ -102,7 +102,8 @@ public class MagicDataService {
                                                     })
                                                     .filter(Objects::nonNull)
                                                     .collect(Collectors.toList());
-                                            return new MagicDto(magicId, magic.getName(), magic.getCastType(), cards);
+                                            return new MagicDto(magicId, magic.getName(), magic.getCastType(), cards,
+                                                    magic.getIndicator());
                                         })
                                         .collect(Collectors.toList());
 
