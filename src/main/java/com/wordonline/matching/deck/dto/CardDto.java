@@ -4,19 +4,15 @@ import com.wordonline.matching.deck.domain.Card;
 
 public record CardDto(
         long id,
-        CardType name,
-        CardType.Type type
+        String name,
+        String element
 ) {
-    public CardDto(long id, CardType cardType) {
-        this(id, cardType, cardType.getType());
-    }
-
     public CardDto(Card card) {
-        this(card.getId(), card.getName(), card.getCardType());
+        this(card.getId(), card.getName(), card.getElement());
     }
 
     public CardDto(CardsDto cardsDto) {
-        this(cardsDto.getId(), cardsDto.getName(), cardsDto.getType());
+        this(cardsDto.getId(), cardsDto.getName(), cardsDto.getElement());
     }
 }
 

@@ -3,7 +3,7 @@ package com.wordonline.matching.deck.dto;
 import java.util.List;
 
 public record CardPoolDto(
-        List<CardDto> cards
+        List<CardListItem> cards
 ) {
 
 }

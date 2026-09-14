@@ -1,10 +1,10 @@
 package com.wordonline.matching.magic.dto;
 
-public record MagicDto(
+public record MagicListRow(
         Long id,
         String name,
         String element,
-        Integer manaCost,
-        Integer aimShape
+        Double manaCost,
+        Double aimShape
 ) {
 }

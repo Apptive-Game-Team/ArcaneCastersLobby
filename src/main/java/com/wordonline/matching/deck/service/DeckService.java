@@ -3,7 +3,6 @@ package com.wordonline.matching.deck.service;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.springframework.context.i18n.LocaleContext;
 import org.springframework.stereotype.Service;
@@ -13,13 +12,13 @@ import com.wordonline.matching.auth.repository.UserRepository;
 import com.wordonline.matching.deck.domain.Deck;
 import com.wordonline.matching.deck.domain.DeckCard;
 import com.wordonline.matching.deck.dto.CardDto;
+import com.wordonline.matching.deck.dto.CardListItem;
 import com.wordonline.matching.deck.dto.CardPoolDto;
 import com.wordonline.matching.deck.dto.DeckCardDto;
 import com.wordonline.matching.deck.dto.DeckRequestDto;
 import com.wordonline.matching.deck.dto.DeckResponseDto;
 import com.wordonline.matching.deck.repository.DeckCardRepository;
 import com.wordonline.matching.deck.repository.DeckRepository;
-import com.wordonline.matching.deck.repository.UserCardRepository;
 import com.wordonline.matching.deck.validation.DeckValidator;
 import com.wordonline.matching.global.service.LocalizationService;
 
@@ -39,7 +38,7 @@ public class DeckService {
     private final DeckRepository deckRepository;
     private final DeckDataService deckDataService;
     private final LocalizationService localizationService;
-    private final UserCardRepository userCardRepository;
+    private final CardListService cardListService;
     private final DeckCardRepository deckCardRepository;
 
     @Transactional(readOnly = true)
@@ -56,7 +55,7 @@ public class DeckService {
                         return Mono.just(false);
                     }
                     return deckCardRepository.findAllByDeckId(user.getSelectedDeckId())
-                            .flatMap(deckCard -> Flux.range(0, deckCard.getCount()).map(i -> deckCard.getCardId()))
+                            .flatMap(deckCard -> Flux.range(0, deckCard.getCount()).map(i -> deckCard.getMagicId()))
                             .collectList()
                             .flatMap(cardIds -> deckValidator.isValid(userId, cardIds));
                 })
@@ -71,7 +70,7 @@ public class DeckService {
 
     private Mono<DeckResponseDto> mapToDeckResponseDto(Deck deck) {
         return deckCardRepository.findAllByDeckId(deck.getId())
-                .flatMap(deckCard -> Flux.range(0, deckCard.getCount()).map(i -> deckCard.getCardId()))
+                .flatMap(deckCard -> Flux.range(0, deckCard.getCount()).map(i -> deckCard.getMagicId()))
                 .collectList()
                 .flatMap(cardIds-> Flux.fromIterable(cardIds).flatMap(deckDataService::getCardDto).collectList())
                 .map(cardDtos ->
@@ -174,14 +173,10 @@ public class DeckService {
 
     @Transactional(readOnly = true)
     public Mono<CardPoolDto> getCardPool(long userId) {
-        return userCardRepository.findAllByUserId(userId)
-                .flatMap(deckDataService::getCardsDto)
-                .collectList()
-                .map(cardsDtos -> cardsDtos.stream()
-                    .flatMap(cardsDto ->
-                            Stream.generate(() -> new CardDto(cardsDto))
-                                    .limit(cardsDto.getCount())
-                    ).toList())
+        return cardListService.getMyCards(userId)
+                .map(response -> response.cards().stream()
+                        .filter(CardListItem::unlocked)
+                        .toList())
                 .map(CardPoolDto::new);
     }
 }

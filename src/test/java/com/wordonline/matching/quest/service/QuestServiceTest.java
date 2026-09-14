@@ -84,9 +84,9 @@ class QuestServiceTest {
         long userId = 1L;
         long cardId = 1L;
         int progress = 50;
-        RewardParam rewardParam = new RewardParam(1L, quest.getId(), "card_id", (int) cardId);
+        RewardParam rewardParam = new RewardParam(1L, quest.getId(), "magic_id", (int) cardId);
 
-        when(rewardParamRepository.findByNameAndValue("card_id", (int) cardId)).thenReturn(Mono.just(rewardParam));
+        when(rewardParamRepository.findByNameAndValue("magic_id", (int) cardId)).thenReturn(Mono.just(rewardParam));
         when(questRepository.findById(quest.getId())).thenReturn(Mono.just(quest));
         when(userQuestRepository.findByUserIdAndQuestId(userId, quest.getId())).thenReturn(Mono.just(userQuest));
         when(questChecker.getProgress(userId, quest)).thenReturn(Mono.just(progress));
@@ -109,7 +109,7 @@ class QuestServiceTest {
         long cardId = 1L;
         int progress = 100; // Progress is complete
         Quest localQuest = new Quest(2L, "checker2", 100, "giver2");
-        RewardParam rewardParam = new RewardParam(1L, localQuest.getId(), "card_id", (int) cardId);
+        RewardParam rewardParam = new RewardParam(1L, localQuest.getId(), "magic_id", (int) cardId);
         UserQuest pendingUserQuest = new UserQuest(1L, 2L, 1L, QuestState.PENDING);
         UserQuest completedUserQuest = new UserQuest(1L, 2L, 1L, QuestState.COMPLETED);
 

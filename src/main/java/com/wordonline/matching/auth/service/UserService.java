@@ -43,7 +43,6 @@ public class UserService {
 
     private Mono<User> initialUser(long memberId) {
         return userRepository.insertUser(memberId)
-                .then(userRepository.initUserCard(memberId))
                 .then(userRepository.initUserMagic(memberId))
                 .then(userRepository.initUserQuest(memberId))
                 .then(userRepository.initUserDeck(memberId))

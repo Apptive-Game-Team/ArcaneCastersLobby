@@ -13,7 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.wordonline.matching.deck.domain.UserCard;
 import com.wordonline.matching.deck.dto.CardDto;
-import com.wordonline.matching.deck.dto.CardType;
 import com.wordonline.matching.deck.repository.UserCardRepository;
 import com.wordonline.matching.deck.service.DeckDataService;
 
@@ -66,26 +65,13 @@ class DeckValidatorTest {
     }
 
     @Test
-    void isValid_ReturnsFalse_WhenMagicTypesAreLessThanThree() {
+    void isValid_ReturnsFalse_WhenElementsAreLessThanTwo() {
         stubCards();
-        stubOwnedCards(1L, 2L, 6L, 7L, 8L);
-
-        StepVerifier.create(deckValidator.isValid(USER_ID, List.of(
-                        1L, 1L, 1L, 2L, 2L, 2L, 6L, 6L, 6L,
-                        7L, 7L, 7L, 8L, 8L, 8L
-                )))
-                .expectNext(false)
-                .verifyComplete();
-    }
-
-    @Test
-    void isValid_ReturnsFalse_WhenAttributeTypesAreLessThanTwo() {
-        stubCards();
-        stubOwnedCards(1L, 2L, 3L, 4L, 6L);
+        stubOwnedCards(1L, 2L, 3L, 4L, 5L);
 
         StepVerifier.create(deckValidator.isValid(USER_ID, List.of(
                         1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L,
-                        4L, 4L, 4L, 6L, 6L, 6L
+                        4L, 4L, 4L, 5L, 5L, 5L
                 )))
                 .expectNext(false)
                 .verifyComplete();
@@ -133,24 +119,24 @@ class DeckValidatorTest {
         when(deckDataService.getCardDtoMap()).thenReturn(Mono.just(cardMap()));
     }
 
-    private void stubOwnedCards(Long... cardIds) {
+    private void stubOwnedCards(Long... magicIds) {
         when(userCardRepository.findAllByUserId(USER_ID)).thenReturn(
-                Flux.fromArray(cardIds).map(cardId -> new UserCard(USER_ID, cardId, 3)));
+                Flux.fromArray(magicIds).map(magicId -> new UserCard(USER_ID, magicId, 3)));
     }
 
     private Map<Long, CardDto> cardMap() {
         return Map.ofEntries(
-                Map.entry(1L, new CardDto(1L, CardType.Shoot)),
-                Map.entry(2L, new CardDto(2L, CardType.Explode)),
-                Map.entry(3L, new CardDto(3L, CardType.Spawn)),
-                Map.entry(4L, new CardDto(4L, CardType.Drop)),
-                Map.entry(5L, new CardDto(5L, CardType.Build)),
-                Map.entry(6L, new CardDto(6L, CardType.Fire)),
-                Map.entry(7L, new CardDto(7L, CardType.Water)),
-                Map.entry(8L, new CardDto(8L, CardType.Lightning)),
-                Map.entry(9L, new CardDto(9L, CardType.Nature)),
-                Map.entry(10L, new CardDto(10L, CardType.Rock)),
-                Map.entry(11L, new CardDto(11L, CardType.Wind))
+                Map.entry(1L, new CardDto(1L, "fireball", "Fire")),
+                Map.entry(2L, new CardDto(2L, "fire_shot", "Fire")),
+                Map.entry(3L, new CardDto(3L, "fire_lord_spirit", "Fire")),
+                Map.entry(4L, new CardDto(4L, "magma_spirit", "Fire")),
+                Map.entry(5L, new CardDto(5L, "fire_explosion", "Fire")),
+                Map.entry(6L, new CardDto(6L, "water_shot", "Water")),
+                Map.entry(7L, new CardDto(7L, "tide_call", "Water")),
+                Map.entry(8L, new CardDto(8L, "bubble_spirit", "Water")),
+                Map.entry(9L, new CardDto(9L, "chain_lightning", "Lightning")),
+                Map.entry(10L, new CardDto(10L, "rock_golem", "Rock")),
+                Map.entry(11L, new CardDto(11L, "leafair", "Nature"))
         );
     }
 }

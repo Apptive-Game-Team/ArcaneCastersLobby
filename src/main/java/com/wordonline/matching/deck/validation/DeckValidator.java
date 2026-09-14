@@ -2,6 +2,7 @@ package com.wordonline.matching.deck.validation;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -9,7 +10,6 @@ import org.springframework.stereotype.Service;
 
 import com.wordonline.matching.deck.domain.UserCard;
 import com.wordonline.matching.deck.dto.CardDto;
-import com.wordonline.matching.deck.dto.CardType;
 import com.wordonline.matching.deck.repository.UserCardRepository;
 import com.wordonline.matching.deck.service.DeckDataService;
 
@@ -23,8 +23,7 @@ public class DeckValidator {
     private final DeckDataService deckDataService;
     private final UserCardRepository userCardRepository;
     public static final int DECK_CARD_COUNT = 15;
-    public static final int LEAST_NUM_OF_MAGIC_CARD_TYPE = 3;
-    public static final int LEAST_NUM_OF_TYPE_CARD_TYPE = 2;
+    public static final int LEAST_NUM_OF_ELEMENTS = 2;
     public static final int MAX_NUM_OF_SAME_CARD = 3;
 
     public Mono<Boolean> isValid(long userId, List<Long> cardIds) {
@@ -42,7 +41,7 @@ public class DeckValidator {
         return Mono.zip(
                         deckDataService.getCardDtoMap(),
                         userCardRepository.findAllByUserId(userId)
-                                .collectMap(UserCard::getCardId, UserCard::getCount))
+                                .collectMap(UserCard::getMagicId, UserCard::getCount))
                 .map(tuple -> {
                     Map<Long, CardDto> cards = tuple.getT1();
                     Map<Long, Integer> ownedCounts = tuple.getT2();
@@ -57,17 +56,12 @@ public class DeckValidator {
                         return false;
                     }
 
-                    long numOfType = cardCounts.keySet().stream()
+                    Set<String> elements = cardCounts.keySet().stream()
                             .map(cards::get)
-                            .filter(card -> card.type() == CardType.Type.Type)
-                            .count();
-                    long numOfMagic = cardCounts.keySet().stream()
-                            .map(cards::get)
-                            .filter(card -> card.type() == CardType.Type.Magic)
-                            .count();
+                            .map(CardDto::element)
+                            .collect(Collectors.toSet());
 
-                    return numOfType >= LEAST_NUM_OF_TYPE_CARD_TYPE
-                            && numOfMagic >= LEAST_NUM_OF_MAGIC_CARD_TYPE;
+                    return elements.size() >= LEAST_NUM_OF_ELEMENTS;
                 });
     }
 }

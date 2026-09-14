@@ -50,7 +50,7 @@ public class QuestService {
 
     @Transactional(readOnly = true)
     public Mono<QuestProgressResponseDto> findQuestProgressByCard(long userId, long cardId) {
-        return findQuestProgress(userId, rewardParamRepository.findByNameAndValue("card_id", (int) cardId)
+        return findQuestProgress(userId, rewardParamRepository.findByNameAndValue("magic_id", (int) cardId)
                 .flatMap(rewardParam -> questRepository.findById(rewardParam.getQuestId())));
     }
 

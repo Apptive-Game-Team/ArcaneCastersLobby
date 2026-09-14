@@ -25,7 +25,8 @@ public class CardListService {
                     return new CardListItem(
                             r.id(),
                             r.name(),
-                            r.type(),
+                            r.element(),
+                            r.manaCost(),
                             r.count(),
                             r.unlocked(),
                             r.unlockText(),
