@@ -14,14 +14,12 @@ select
   m.name as "name",
   m.element as "element",
   mana.value as "mana_cost",
-  aim.value as "aim_shape"
+  m.indicator::text as "indicator"
 from magics m
 left join game_objects go on go.name = m.name
 left join parameters mp on mp.name = 'mana_cost'
 left join parameter_values mana on mana.game_object_id = go.id and mana.parameter_id = mp.id
-left join parameters ap on ap.name = 'aim_shape'
-left join parameter_values aim on aim.game_object_id = go.id and aim.parameter_id = ap.id
 order by m.id
 """)
-    Flux<MagicListRow> findAllWithManaCostAndAimShape();
+    Flux<MagicListRow> findAllWithManaCostAndIndicator();
 }

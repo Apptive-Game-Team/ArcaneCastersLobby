@@ -5,6 +5,6 @@ public record MagicListRow(
         String name,
         String element,
         Double manaCost,
-        Double aimShape
+        String indicator
 ) {
 }
