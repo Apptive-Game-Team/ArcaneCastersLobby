@@ -7,8 +7,8 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
 
 /**
  * `indicator` carries a jsonb document from `magics.indicator` as a plain `String`
- * (r2dbc-postgresql decodes a jsonb column directly into a `String`-typed field, so
- * `Magic.indicator` needs no cast or converter). The lobby must not parse or validate
+ * (`JsonToStringReadConverter` turns the driver's decoded jsonb value into that text; see
+ * `JsonToStringReadConverterTest`). The lobby must not parse or validate
  * that document, only pass it through to the client inline as a JSON object, so
  * `MagicDto.indicator` is annotated `@JsonRawValue`. This confirms Jackson emits the
  * string's content verbatim instead of a quoted, escaped string, and that a null

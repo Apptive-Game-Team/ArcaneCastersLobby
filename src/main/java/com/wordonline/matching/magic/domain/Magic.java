@@ -22,9 +22,13 @@ public class Magic {
 
     /**
      * jsonb document that draws the magic's aim indicator (see docs/api/data-api.md).
-     * The lobby server never parses this value: r2dbc-postgresql decodes a jsonb column
-     * straight into a String, and {@link com.wordonline.matching.magic.dto.MagicDto}
+     * The lobby server never parses this value: r2dbc-postgresql decodes the jsonb column
+     * into an {@code io.r2dbc.postgresql.codec.Json}, which
+     * {@link com.wordonline.matching.global.config.database.JsonToStringReadConverter}
+     * turns into the document text, and {@link com.wordonline.matching.magic.dto.MagicDto}
      * re-emits it inline with {@code @JsonRawValue} so it reaches the client unmodified.
+     * Drop that converter and this field holds {@code JsonByteArrayInput{...}} instead,
+     * which {@code @JsonRawValue} writes into the response unquoted.
      */
     private String indicator;
 }
