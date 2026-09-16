@@ -44,11 +44,6 @@ team6515:
   jwt:
     path: ${JWT_FILE_PATH:}
 
-
-jwt:
-  access-private-key: ${JWT_PRIVATE_KEY}
-  access-public-key: ${JWT_PUBLIC_KEY}
-
 deploy:
   type: ${DEPLOY_TYPE:DEV}
 

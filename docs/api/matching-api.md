@@ -222,7 +222,7 @@ Authorization: Bearer <server token>
 | 항목 | 값 |
 |---|---|
 | 헤더 | `Authorization: Bearer <token>` |
-| 토큰 | 계정 서버 `POST /admin/tokens`(`SUPER_ADMIN` 전용)가 발급하는 server token. `JWT_PUBLIC_KEY`로 서명 검증 |
+| 토큰 | 계정 서버 `POST /admin/tokens`(`SUPER_ADMIN` 전용)가 발급하는 server token. 계정 서버의 `/.well-known/jwks`로 서명 검증 |
 | 필수 claim | `type = "server_token"`, `memberId` **없음** (`sub`는 `server`) |
 | 선택 claim | `scope`. `internal-api.required-authority`를 설정하면 그 authority가 `scope`에 있어야 한다 |
 
@@ -230,7 +230,7 @@ Authorization: Bearer <server token>
 서명은 유효하므로 인증 자체는 통과하지만 권한이 없어 `403`이 된다. 토큰이 없거나 서명이
 검증되지 않으면 `401`이다. 사용자 체인과 달리 `/login`으로 리다이렉트하지 않는다.
 
-로비에 새로 저장하는 비밀값은 없다. 검증은 기존 `JWT_PUBLIC_KEY`로 하고, 호출자는
+로비에 새로 저장하는 비밀값은 없다. 검증은 계정 서버의 `/.well-known/jwks`로 하고, 호출자는
 `JwtWebClientConfig`(`team6515.jwt.path`)와 같은 방식으로 파일에서 읽은 토큰을 보낸다.
 
 | 설정 | 기본값 | 설명 |

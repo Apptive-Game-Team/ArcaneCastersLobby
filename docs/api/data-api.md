@@ -155,7 +155,7 @@
 -   `{"parameter": "<name>"}` — `<name>`은 클라이언트가 `/api/data/parameters`에서 이미 읽어온 파라미터 이름입니다.
 -   `{"parameter": "<name>", "fallback": <number>}` — 해당 파라미터를 찾지 못했을 때 쓸 기본값을 함께 지정합니다.
 
-예시 두 가지:
+예시 세 가지:
 
 ```json
 {"version":1,"layers":[{"shape":"lane","origin":"caster","end":"target","halfWidth":{"parameter":"radius"}}]}
@@ -164,6 +164,13 @@
 ```json
 {"version":1,"layers":[{"shape":"circle","origin":"target","radius":{"parameter":"radius"}}]}
 ```
+
+```json
+{"version":1,"layers":[{"shape":"circle","origin":"target","radius":{"parameter":"radius"}},{"shape":"lane","origin":"target","end":"forward","length":{"parameter":"attack_range"},"halfWidth":0.4}]}
+```
+
+세 번째는 layer 를 두 개 쌓은 문서입니다. 설치 지점과 실제로 때리는 지점이 다른
+마법이 이런 모양이 됩니다.
 
 카드 조합(`cards`)과 시전 종류(`castType`)는 더 이상 내려주지 않습니다. 카드 한 장이 마법 하나가 되면서 조합이라는 개념 자체가 없어졌고, 마나 비용과 사거리 같은 값의 키가 시전 종류 이름 대신 마법 이름으로 옮겨갔기 때문입니다.
 
