@@ -18,9 +18,9 @@ import reactor.core.publisher.Mono;
 /**
  * 덱이 저장될 수 있는지 본다.
  *
- * <p>덱 구성에는 제한이 없다. 장수도, 같은 마법을 몇 장 넣었는지도, 원소가 몇 종류인지도 보지 않는다.
- * 남은 것은 자기 것이 아닌 카드를 덱에 넣지 못하게 하는 두 가지뿐이다: 있는 마법이어야 하고, 가진
- * 장수를 넘지 않아야 한다.
+ * <p>덱 한 벌은 {@value #DECK_CARD_COUNT} 장이다. 그 밖의 구성에는 제한이 없다. 같은 마법을 몇 장
+ * 넣었는지도, 원소가 몇 종류인지도 보지 않는다. 나머지 두 가지는 자기 것이 아닌 카드를 덱에 넣지
+ * 못하게 하는 검사다: 있는 마법이어야 하고, 가진 장수를 넘지 않아야 한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -29,9 +29,10 @@ public class DeckValidator {
     private final DeckDataService deckDataService;
     private final UserCardRepository userCardRepository;
 
+    public static final int DECK_CARD_COUNT = 15;
+
     public Mono<Boolean> isValid(long userId, List<Long> cardIds) {
-        // 목록이 아예 없는 것은 빈 덱이 아니라 잘못 만들어진 요청이다.
-        if (cardIds == null) {
+        if (cardIds == null || cardIds.size() != DECK_CARD_COUNT) {
             return Mono.just(false);
         }
 
