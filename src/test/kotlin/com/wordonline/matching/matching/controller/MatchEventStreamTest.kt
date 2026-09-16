@@ -3,6 +3,7 @@ package com.wordonline.matching.matching.controller
 import com.wordonline.matching.matching.config.MatchEventStreamProperties
 import com.wordonline.matching.matching.domain.MatchTicket
 import com.wordonline.matching.matching.domain.MatchTicketState
+import com.wordonline.matching.matching.dto.MatchTicketResponse
 import com.wordonline.matching.matching.service.GameMatchService
 import com.wordonline.matching.matching.service.SessionLostReportService
 import kotlinx.coroutines.flow.emptyFlow
@@ -53,7 +54,7 @@ class MatchEventStreamTest {
 
         assertThat(events).allSatisfy {
             assertThat(it.comment()).isEqualTo("keep-alive")
-            assertThat(it.data() as MatchTicket?).isNull()
+            assertThat(it.data() as MatchTicketResponse?).isNull()
         }
     }
 
@@ -67,7 +68,7 @@ class MatchEventStreamTest {
             .toList()
 
         val update = events.single { it.data() != null }
-        assertThat(update.data() as MatchTicket?).isEqualTo(ticket)
+        assertThat(update.data() as MatchTicketResponse?).isEqualTo(MatchTicketResponse.from(ticket))
         assertThat(update.event()).isEqualTo("match-ticket-updated")
         assertThat(update.id()).isEqualTo("7")
     }
