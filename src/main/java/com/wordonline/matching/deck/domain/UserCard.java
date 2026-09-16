@@ -10,16 +10,16 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter
-@Table("user_cards")
+@Table("user_magics")
 public class UserCard {
 
     @Id
     private Long id;
     private Long userId;
-    private Long cardId;
+    private Long magicId;
     private Integer count;
 
-    public UserCard(Long userId, Long cardId, Integer count) {
-        this(null, userId, cardId, count);
+    public UserCard(Long userId, Long magicId, Integer count) {
+        this(null, userId, magicId, count);
     }
 }

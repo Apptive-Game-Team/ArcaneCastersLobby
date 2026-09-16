@@ -66,7 +66,11 @@ class LegacyGameMatchService(
         for (server in candidates) {
             val ready = offerSession(server, sessionDto, attemptId) ?: continue
 
-            log.info("Session created on game server {}: sessionId={}", server.url, sessionDto.sessionId)
+            log.info(
+                "Session created on game server {}: sessionId={}",
+                gameServerManagementService.callUrl(server),
+                sessionDto.sessionId,
+            )
             // the URL must come from the server that actually accepted, not from the first candidate
             val matchedInfo = MatchedInfoDto(
                 "Successfully Matched",
@@ -88,30 +92,72 @@ class LegacyGameMatchService(
         throw NoAvailableGameServerException(localizedMessage("error.gameserver.unavailable"))
     }
 
-    /** Returns only a validated ready response; refusal, stale response, and transport failure allow failover. */
-    private suspend fun offerSession(server: Server, sessionDto: SessionDto, attemptId: String): SessionReadyResponse? =
-        try {
-            val response = webClientBuilder.baseUrl(server.url).build()
-                .post()
-                .uri("/api/server/game-sessions")
-                .bodyValue(CreateSessionRequest(attemptId, sessionDto))
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .bodyToMono(SessionReadyResponse::class.java)
-                .awaitSingle()
-
-            if (!response.ready || response.attemptId != attemptId || response.sessionId != sessionDto.sessionId) {
-                log.warn("Game server {} returned invalid readiness for session {}", server.url, sessionDto.sessionId)
-                null
-            } else {
-                response
-            }
+    /**
+     * Offers the session on [server]'s call address and returns only a validated ready response;
+     * refusal, stale response, and transport failure allow failover. [Server.url] is not used
+     * for the primary attempt: it is reserved for the address handed back to the client.
+     *
+     * When the primary attempt goes out on the internal address and fails with a timeout or
+     * any other exception, this retries exactly once on the public address - the health check
+     * that chose the internal address can be stale, since a game server can go unreachable
+     * internally after its last successful probe. A primary attempt that was already on the
+     * public address never retries: that would send the identical request twice.
+     */
+    private suspend fun offerSession(server: Server, sessionDto: SessionDto, attemptId: String): SessionReadyResponse? {
+        val callUrl = gameServerManagementService.callUrl(server)
+        val response = try {
+            requestSession(callUrl, sessionDto, attemptId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.warn("Game server {} failed to take session {}: {}", server.url, sessionDto.sessionId, e.toString())
-            null
+            if (callUrl == server.url) {
+                log.warn("Game server {} failed to take session {}: {}", callUrl, sessionDto.sessionId, e.toString())
+                return null
+            }
+
+            log.warn(
+                "Game server {} failed to take session {} via internal address {}; retrying on public address {}: {}",
+                server.id,
+                sessionDto.sessionId,
+                callUrl,
+                server.url,
+                e.toString(),
+            )
+            try {
+                requestSession(server.url, sessionDto, attemptId)
+            } catch (e2: CancellationException) {
+                throw e2
+            } catch (e2: Exception) {
+                log.warn(
+                    "Game server {} failed to take session {} on public address {} too: {}",
+                    server.id,
+                    sessionDto.sessionId,
+                    server.url,
+                    e2.toString(),
+                )
+                return null
+            }
         }
+
+        return if (!response.ready || response.attemptId != attemptId || response.sessionId != sessionDto.sessionId) {
+            log.warn("Game server {} returned invalid readiness for session {}", callUrl, sessionDto.sessionId)
+            null
+        } else {
+            response
+        }
+    }
+
+    private suspend fun requestSession(url: String, sessionDto: SessionDto, attemptId: String): SessionReadyResponse =
+        // clone() first: baseUrl() mutates the shared builder, and session offers run concurrently
+        // across candidate servers. See GameServerClient for the failure this prevents.
+        webClientBuilder.clone().baseUrl(url).build()
+            .post()
+            .uri("/api/server/game-sessions")
+            .bodyValue(CreateSessionRequest(attemptId, sessionDto))
+            .accept(MediaType.APPLICATION_JSON)
+            .retrieve()
+            .bodyToMono(SessionReadyResponse::class.java)
+            .awaitSingle()
 
     suspend fun getMatchInfo(userId: Long): MatchedInfoDto {
         val sessionInfo = sessionRecoveryStore.getSessionInfo(userId).awaitSingleOrNull()
@@ -132,7 +178,7 @@ class LegacyGameMatchService(
      */
     suspend fun isSessionActive(serverUrl: String, sessionId: String): Boolean =
         try {
-            webClientBuilder.baseUrl(serverUrl).build()
+            webClientBuilder.clone().baseUrl(serverUrl).build()
                 .get()
                 .uri("/api/server/game-sessions/$sessionId/active")
                 .retrieve()

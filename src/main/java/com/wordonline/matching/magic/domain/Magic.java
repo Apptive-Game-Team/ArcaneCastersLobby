@@ -7,6 +7,8 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
+import java.time.LocalDateTime;
+
 @Getter
 @Table(name = "magics")
 @NoArgsConstructor
@@ -16,7 +18,8 @@ public class Magic {
     @Id
     private Long id;
     private String name;
+    private String element;
 
-    @Column("cast_type")
-    private String castType;
+    @Column("updated_at")
+    private LocalDateTime updatedAt;
 }

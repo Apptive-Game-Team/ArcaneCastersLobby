@@ -14,7 +14,7 @@ public record DeckResponseDto(
                 deckCardDtos.getFirst().deckId(),
                 deckCardDtos.getFirst().deckName(),
                 deckCardDtos.stream()
-                        .flatMap(deckCardDto -> Stream.generate(() -> new CardDto(deckCardDto.cardId(), deckCardDto.cardName())) // 1. 생성
+                        .flatMap(deckCardDto -> Stream.generate(() -> new CardDto(deckCardDto.magicId(), deckCardDto.magicName(), deckCardDto.element())) // 1. 생성
                                 .limit(deckCardDto.count()))
                         .toList()
         );

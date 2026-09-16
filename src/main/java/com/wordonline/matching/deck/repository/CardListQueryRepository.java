@@ -11,26 +11,30 @@ public interface CardListQueryRepository extends R2dbcRepository<Card, Long> {
 
     @Query("""
 select
-  c.id as "id",
-  c.name as "name",
-  c.card_type::text as "type",
-  coalesce(uc.count, 0) as "count",
-  (uc.card_id is not null) as "unlocked",
+  m.id as "id",
+  m.name as "name",
+  m.element as "element",
+  mana.value::int as "mana_cost",
+  coalesce(um.count, 0) as "count",
+  (um.magic_id is not null) as "unlocked",
   case
-    when uc.card_id is null and c.unlock_condition_type = 'WIN_COUNT'
-      then (c.unlock_required_value::text || '승')
+    when um.magic_id is null and m.unlock_condition_type = 'WIN_COUNT'
+      then (m.unlock_required_value::text || '승')
     else null
   end as "unlock_text",
   case
-    when uc.card_id is null and c.unlock_condition_type = 'WIN_COUNT'
-      then (least(u.total_wins, c.unlock_required_value)::text || '/' || c.unlock_required_value::text)
+    when um.magic_id is null and m.unlock_condition_type = 'WIN_COUNT'
+      then (least(u.total_wins, m.unlock_required_value)::text || '/' || m.unlock_required_value::text)
     else null
   end as "progress_text"
-from cards c
+from magics m
 join users u on u.id = :userId
-left join user_cards uc
-  on uc.user_id = :userId and uc.card_id = c.id
-order by c.id
+left join user_magics um
+  on um.user_id = :userId and um.magic_id = m.id
+left join game_objects go on go.name = m.name
+left join parameters mp on mp.name = 'mana_cost'
+left join parameter_values mana on mana.game_object_id = go.id and mana.parameter_id = mp.id
+order by m.id
 """)
     Flux<MyCardListRow> findMyCardList(long userId);
 }

@@ -16,10 +16,10 @@ public class DeckCard {
     @Id
     private Long id;
     private Long deckId;
-    private Long cardId;
+    private Long magicId;
     private Integer count;
 
-    public DeckCard(Long deckId, Long cardId, Integer count) {
-        this(null, deckId, cardId, count);
+    public DeckCard(Long deckId, Long magicId, Integer count) {
+        this(null, deckId, magicId, count);
     }
 }

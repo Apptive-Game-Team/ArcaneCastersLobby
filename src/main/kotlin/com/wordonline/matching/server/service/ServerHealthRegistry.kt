@@ -51,13 +51,18 @@ class ServerHealthRegistry(
      *
      * Hysteresis: one success restores a server immediately, while it takes
      * [GameServerProperties.failureThreshold] consecutive failures to take one out of rotation.
+     *
+     * [respondingUrl] is the address that actually answered - [Server.internalBaseUrl] when it
+     * did, [Server.url] when the probe fell back to the public address. It is only remembered
+     * on a successful probe; a failed probe leaves the last known responding address in place
+     * rather than clearing it, since nothing reads it while the server is unhealthy.
      */
-    fun recordProbe(serverId: Long?, healthy: Boolean) {
+    fun recordProbe(serverId: Long?, healthy: Boolean, respondingUrl: String? = null) {
         if (serverId == null) return
 
         val state = healthStates.computeIfAbsent(serverId) { HealthState() }
         val wasHealthy = state.isHealthy()
-        state.record(healthy, failureThreshold)
+        state.record(healthy, failureThreshold, respondingUrl)
         val isHealthy = state.isHealthy()
 
         if (wasHealthy != isHealthy) {
@@ -80,6 +85,17 @@ class ServerHealthRegistry(
     fun consecutiveFailures(serverId: Long?): Int =
         serverId?.let { healthStates[it]?.consecutiveFailures() } ?: 0
 
+    /** The address the last successful health probe actually got an answer from, if any. */
+    fun respondingUrl(serverId: Long?): String? = serverId?.let { healthStates[it]?.respondingUrl() }
+
+    /**
+     * Address to call [server] on right now. Prefers the address the health check last got an
+     * answer from over [Server.callUrl], because a probe result can be more current than the
+     * static "internal first" choice: the internal address may be configured but unreachable,
+     * something only a real probe - not the field's presence - can tell.
+     */
+    fun callUrl(server: Server): String = respondingUrl(server.id) ?: server.callUrl
+
     /** Every server that passed its health check and is not draining. */
     fun availableServers(): List<Server> =
         snapshot.filter { !it.isDraining && isHealthy(it.id) }
@@ -89,12 +105,16 @@ class ServerHealthRegistry(
         /** Starts unhealthy: a server earns availability by answering, not by existing. */
         private var healthy = false
         private var consecutiveFailures = 0
+        private var respondingUrl: String? = null
 
         @Synchronized
-        fun record(probeSucceeded: Boolean, failureThreshold: Int) {
+        fun record(probeSucceeded: Boolean, failureThreshold: Int, respondingUrl: String?) {
             if (probeSucceeded) {
                 consecutiveFailures = 0
                 healthy = true
+                if (respondingUrl != null) {
+                    this.respondingUrl = respondingUrl
+                }
                 return
             }
             consecutiveFailures++
@@ -108,5 +128,8 @@ class ServerHealthRegistry(
 
         @Synchronized
         fun consecutiveFailures(): Int = consecutiveFailures
+
+        @Synchronized
+        fun respondingUrl(): String? = respondingUrl
     }
 }

@@ -24,9 +24,4 @@ public class MagicService {
                 .collectList()
                 .map(MagicResponse::new);
     }
-
-    public Mono<Void> giveMagic(long userId, long magicId) {
-        return userMagicRepository.save(new UserMagic(null, magicId, userId))
-                .then();
-    }
 }

@@ -7,7 +7,7 @@ plugins {
 }
 
 group = 'com.wordonline'
-version = '0.2.0'
+version = '0.3.0'
 description = 'word-online-matching'
 
 java {
@@ -64,7 +64,9 @@ dependencies {
 
     // Database
     implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
-    runtimeOnly 'org.postgresql:r2dbc-postgresql'
+    // On the compile classpath, not runtimeOnly: JsonToStringReadConverter names this
+    // driver's Json type, which is what a jsonb column decodes into.
+    implementation 'org.postgresql:r2dbc-postgresql'
 
     // Redis
     implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'

@@ -6,8 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  * Who may call the internal API under `/api/internal`.
  *
  * No credential lives here. Callers present a JWT signed by the account server's key, which
- * the lobby already verifies with `JWT_PUBLIC_KEY`, so there is nothing to store, rotate or
- * accidentally commit - only which of those tokens count as a service caller.
+ * the lobby already verifies against the account server's JWK Set ([AccountServerProperties]),
+ * so there is nothing to store, rotate or accidentally commit - only which of those tokens
+ * count as a service caller.
  */
 @ConfigurationProperties(prefix = "internal-api")
 data class InternalApiProperties(

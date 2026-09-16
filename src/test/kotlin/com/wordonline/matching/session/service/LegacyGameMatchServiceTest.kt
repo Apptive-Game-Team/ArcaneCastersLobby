@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpHeaders
@@ -27,7 +28,15 @@ import reactor.core.publisher.Mono
 
 class LegacyGameMatchServiceTest {
 
-    private val gameServerManagementService: GameServerManagementService = mock()
+    /**
+     * Default `callUrl` mirrors [Server.callUrl] (internal address when set, public otherwise) so
+     * every existing test keeps sending requests where it always has, without each one having to
+     * stub this itself. Tests that exercise the retry-on-failure fallback below rely on this
+     * default returning the internal address for a [Server] built with `internalBaseUrl` set.
+     */
+    private val gameServerManagementService: GameServerManagementService = mock {
+        on { callUrl(any()) } doAnswer { invocation -> invocation.getArgument<Server>(0).callUrl }
+    }
     private val sessionRecoveryStore: SessionRecoveryStore = mock()
     private val localizationService: LocalizationService = mock()
     private val userService: UserService = mock()
@@ -55,13 +64,14 @@ class LegacyGameMatchServiceTest {
             .body("""{"attemptId":"attempt-1","sessionId":"session-1","ready":$ready,"serverUrl":"http://internal:9090","webSocketUrl":"wss://game.example/ws","instanceId":"boot-1"}""")
             .build()
 
-    private fun server(id: Long, domain: String) = Server(
+    private fun server(id: Long, domain: String, internalBaseUrl: String? = null) = Server(
         id = id,
         protocol = "http",
         domain = domain,
         port = 9090,
         state = ServerState.ACTIVE,
         type = ServerType.GAME,
+        internalBaseUrl = internalBaseUrl,
     )
 
     private fun stubUsers() {
@@ -88,6 +98,54 @@ class LegacyGameMatchServiceTest {
             .isEqualTo("http://internal:9090")
         assertThat(matched.matchInfo.webSocketUrl).isEqualTo("wss://game.example/ws")
         assertThat(sentRequests.map { it.url().host }).containsExactly("alpha", "beta")
+    }
+
+    @Test
+    fun `internal_base_url이 있으면 세션 생성 요청은 내부 주소로 나가고 클라이언트에 담기는 주소는 공개 주소 그대로다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers())
+            .thenReturn(listOf(server(1L, "alpha", internalBaseUrl = "http://ac-game-alpha:8080")))
+
+        val matched = service { request -> readyResponse(true) }.createSession(sessionDto, "attempt-1")
+
+        assertThat(sentRequests.single().url().host)
+            .`as`("나가는 요청은 internal_base_url을 써야 한다")
+            .isEqualTo("ac-game-alpha")
+        assertThat(sentRequests.single().url().port)
+            .`as`("나가는 요청은 internal_base_url의 포트를 써야 한다")
+            .isEqualTo(8080)
+        assertThat(matched.matchInfo.server)
+            .`as`("클라이언트에 담기는 주소는 게임 서버 응답의 공개 주소 그대로여야 한다")
+            .isEqualTo("http://internal:9090")
+    }
+
+    @Test
+    fun `내부 주소로 세션 생성 요청이 실패하면 공개 주소로 한 번 재시도한다`() = runTest {
+        stubUsers()
+        val internalUrl = "http://ac-game-alpha:8080"
+        whenever(gameServerManagementService.getAvailableServers())
+            .thenReturn(listOf(server(1L, "alpha", internalBaseUrl = internalUrl)))
+
+        val builder = WebClient.builder().exchangeFunction { request ->
+            sentRequests += request
+            if (request.url().host == "ac-game-alpha") {
+                Mono.error(IllegalStateException("connection refused"))
+            } else {
+                Mono.just(readyResponse(true))
+            }
+        }
+        val service = LegacyGameMatchService(
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+        )
+
+        val matched = service.createSession(sessionDto, "attempt-1")
+
+        assertThat(sentRequests.map { it.url().host })
+            .`as`("내부 주소로 한 번, 실패 후 공개 주소로 한 번, 총 두 번만 나가야 한다")
+            .containsExactly("ac-game-alpha", "alpha")
+        assertThat(matched.matchInfo.server)
+            .`as`("재시도가 일어나도 클라이언트에 담기는 주소는 게임 서버 응답의 공개 주소 그대로여야 한다")
+            .isEqualTo("http://internal:9090")
     }
 
     @Test

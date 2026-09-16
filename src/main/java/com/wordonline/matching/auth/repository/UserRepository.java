@@ -42,27 +42,15 @@ WHERE id = :userId;
 
     @Query(
             """
-            INSERT INTO user_magics(user_id, magic_id)
+            INSERT INTO user_magics(user_id, magic_id, count)
             (
-                SELECT :userId, m.id
+                SELECT :userId, m.id, 3
                 FROM magics m
                 WHERE m.access_type = 'DEFAULT'
             );
             """
     )
     Mono<Void> initUserMagic(@Param("userId") Long userId);
-
-    @Query(
-            """
-            INSERT INTO user_cards(user_id, card_id, count)
-            (
-                SELECT :userId, c.id, 3
-                FROM cards c
-                WHERE c.access_type = 'DEFAULT'
-            );
-            """
-    )
-    Mono<Void> initUserCard(@Param("userId") Long userId);
 
     @Query(
             """
@@ -88,9 +76,9 @@ WHERE id = :userId;
                RETURNING id, name
             ),
             inserted_deck_ids AS (
-                INSERT INTO deck_cards(deck_id, card_id, count)
+                INSERT INTO deck_cards(deck_id, magic_id, count)
                 (
-                    SELECT i.id, dc.card_id, dc.count
+                    SELECT i.id, dc.magic_id, dc.count
                     FROM inserted_decks i
                     JOIN decks d ON i.name = d.name AND d.user_id = 0
                     JOIN deck_cards dc ON d.id = dc.deck_id

@@ -20,6 +20,13 @@ data class Server(
      * `null` and fall back to querying session liveness.
      */
     val instanceId: String? = null,
+    /**
+     * Docker-network base URL the game server reports for itself
+     * (`V088_20260909__add_server_internal_base_url.sql` in WordOnlineDatabase): scheme, host, and port, no
+     * trailing slash. `null` means the game server has not reported one yet, not that it is
+     * unreachable internally - older game server builds simply never write this column.
+     */
+    val internalBaseUrl: String? = null,
 ) {
     val isLocal: Boolean
         get() = domain == "localhost" || domain == "127.0.0.1"
@@ -31,6 +38,17 @@ data class Server(
             }
             return "$protocol://$domain:$port"
         }
+
+    /**
+     * Address to use when this application calls the server directly.
+     *
+     * Chosen once, here, and not retried at request time: a wrong [internalBaseUrl] must fail
+     * loudly instead of silently falling back to [url] and doubling matching latency behind a
+     * public-network hop. Never use this for a value handed back to the Unity client - clients
+     * must keep connecting through [url].
+     */
+    val callUrl: String
+        get() = internalBaseUrl ?: url
 
     /**
      * A draining server finishes its running sessions but must never receive a new one.

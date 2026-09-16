@@ -4,13 +4,13 @@ import com.wordonline.matching.deck.domain.Deck;
 
 public record DeckCardDto(
         long deckId,
-        long cardId,
+        long magicId,
         int count,
         String deckName,
-        CardType cardName,
-        CardType.Type type
+        String magicName,
+        String element
 ) {
     public DeckCardDto(Deck deck, CardDto cardDto, int count) {
-        this(deck.getId(), cardDto.id(), count, deck.getName(), cardDto.name(), cardDto.type());
+        this(deck.getId(), cardDto.id(), count, deck.getName(), cardDto.name(), cardDto.element());
     }
 }

@@ -1,13 +1,10 @@
 package com.wordonline.matching.global.config;
 
 import java.net.URI;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.autoconfigure.security.reactive.EndpointRequest;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.boot.actuate.metrics.export.prometheus.PrometheusScrapeEndpoint;
@@ -25,8 +22,6 @@ import org.springframework.security.config.web.server.ServerHttpSecurity.CsrfSpe
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -37,13 +32,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
-import com.nimbusds.jose.jwk.JWK;
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
-import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.proc.SecurityContext;
-
 import lombok.RequiredArgsConstructor;
 
 @Configuration
@@ -51,12 +39,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @EnableReactiveMethodSecurity
 public class WebSecurityConfig {
-
-    @Value("${jwt.access-public-key}")
-    private RSAPublicKey rsaPublicKey;
-
-    @Value("${jwt.access-private-key}")
-    private RSAPrivateKey rsaPrivateKey;
 
     @Bean
     public ReactiveAuthenticationManager authenticationManager(ReactiveJwtDecoder jwtDecoder) {
@@ -68,16 +50,15 @@ public class WebSecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * Verifies every JWT the lobby accepts against the account server's JWK Set instead of a
+     * key baked into this service's own configuration. The account server signs both member
+     * tokens and the service tokens {@link InternalApiSecurityConfig} checks with the same
+     * key, so one JWK Set endpoint covers both chains.
+     */
     @Bean
-    JwtEncoder jwtEncoder() {
-        JWK jwk = new RSAKey.Builder(this.rsaPublicKey).privateKey(this.rsaPrivateKey).build();
-        JWKSource<SecurityContext> jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
-        return new NimbusJwtEncoder(jwks);
-    }
-
-    @Bean
-    ReactiveJwtDecoder jwtDecoder() {
-        return NimbusReactiveJwtDecoder.withPublicKey(this.rsaPublicKey).build();
+    ReactiveJwtDecoder jwtDecoder(AccountServerProperties accountServerProperties) {
+        return NimbusReactiveJwtDecoder.withJwkSetUri(accountServerProperties.getJwksUri()).build();
     }
 
     @Bean
