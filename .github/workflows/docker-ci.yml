@@ -3,7 +3,7 @@ name: Docker CI
 on:
   push:
     branches:
-      - main
+      - dev
       - deploy
       - magic-card
 
@@ -32,11 +32,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/apptive-game-team/arcane-casters-lobby
+          images: ghcr.io/apptive-game-team/ac-lobby
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/deploy' }}
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=magic-card,enable=${{ github.ref == 'refs/heads/magic-card' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
