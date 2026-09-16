@@ -2,7 +2,6 @@ package com.wordonline.matching.deck.validation;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -16,27 +15,28 @@ import com.wordonline.matching.deck.service.DeckDataService;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
+/**
+ * 덱이 저장될 수 있는지 본다.
+ *
+ * <p>덱 구성에는 제한이 없다. 장수도, 같은 마법을 몇 장 넣었는지도, 원소가 몇 종류인지도 보지 않는다.
+ * 남은 것은 자기 것이 아닌 카드를 덱에 넣지 못하게 하는 두 가지뿐이다: 있는 마법이어야 하고, 가진
+ * 장수를 넘지 않아야 한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class DeckValidator {
 
     private final DeckDataService deckDataService;
     private final UserCardRepository userCardRepository;
-    public static final int DECK_CARD_COUNT = 15;
-    public static final int LEAST_NUM_OF_ELEMENTS = 2;
-    public static final int MAX_NUM_OF_SAME_CARD = 3;
 
     public Mono<Boolean> isValid(long userId, List<Long> cardIds) {
-        if (cardIds == null || cardIds.size() != DECK_CARD_COUNT) {
+        // 목록이 아예 없는 것은 빈 덱이 아니라 잘못 만들어진 요청이다.
+        if (cardIds == null) {
             return Mono.just(false);
         }
 
         Map<Long, Long> cardCounts = cardIds.stream()
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
-
-        if (cardCounts.values().stream().anyMatch(count -> count > MAX_NUM_OF_SAME_CARD)) {
-            return Mono.just(false);
-        }
 
         return Mono.zip(
                         deckDataService.getCardDtoMap(),
@@ -50,18 +50,8 @@ public class DeckValidator {
                         return false;
                     }
 
-                    boolean allOwned = cardCounts.entrySet().stream()
+                    return cardCounts.entrySet().stream()
                             .allMatch(entry -> entry.getValue() <= ownedCounts.getOrDefault(entry.getKey(), 0));
-                    if (!allOwned) {
-                        return false;
-                    }
-
-                    Set<String> elements = cardCounts.keySet().stream()
-                            .map(cards::get)
-                            .map(CardDto::element)
-                            .collect(Collectors.toSet());
-
-                    return elements.size() >= LEAST_NUM_OF_ELEMENTS;
                 });
     }
 }
