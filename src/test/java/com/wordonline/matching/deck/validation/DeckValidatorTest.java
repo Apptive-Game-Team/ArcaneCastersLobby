@@ -35,7 +35,7 @@ class DeckValidatorTest {
     private DeckValidator deckValidator;
 
     @Test
-    void isValid_ReturnsTrue_WhenDeckSatisfiesStandard() {
+    void isValid_ReturnsTrue_WhenEveryCardIsOwned() {
         stubCards();
         stubOwnedCards(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
 
@@ -55,17 +55,7 @@ class DeckValidatorTest {
     }
 
     @Test
-    void isValid_ReturnsFalse_WhenSameCardIsMoreThanThree() {
-        StepVerifier.create(deckValidator.isValid(USER_ID, List.of(
-                        1L, 1L, 1L, 1L, 2L, 3L, 4L, 5L, 5L,
-                        6L, 7L, 8L, 9L, 10L, 11L
-                )))
-                .expectNext(false)
-                .verifyComplete();
-    }
-
-    @Test
-    void isValid_ReturnsFalse_WhenElementsAreLessThanTwo() {
+    void isValid_ReturnsTrue_WhenEveryCardSharesOneElement() {
         stubCards();
         stubOwnedCards(1L, 2L, 3L, 4L, 5L);
 
@@ -73,6 +63,35 @@ class DeckValidatorTest {
                         1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L,
                         4L, 4L, 4L, 5L, 5L, 5L
                 )))
+                .expectNext(true)
+                .verifyComplete();
+    }
+
+    @Test
+    void isValid_ReturnsTrue_WhenSameCardIsMoreThanThreeAndOwned() {
+        stubCards();
+        when(userCardRepository.findAllByUserId(USER_ID)).thenReturn(Flux.just(
+                new UserCard(USER_ID, 1L, 15)
+        ));
+
+        StepVerifier.create(deckValidator.isValid(USER_ID, List.of(
+                        1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L,
+                        1L, 1L, 1L, 1L, 1L, 1L
+                )))
+                .expectNext(true)
+                .verifyComplete();
+    }
+
+    @Test
+    void isValid_ReturnsFalse_WhenDeckIsEmpty() {
+        StepVerifier.create(deckValidator.isValid(USER_ID, List.of()))
+                .expectNext(false)
+                .verifyComplete();
+    }
+
+    @Test
+    void isValid_ReturnsFalse_WhenCardIdsAreMissing() {
+        StepVerifier.create(deckValidator.isValid(USER_ID, null))
                 .expectNext(false)
                 .verifyComplete();
     }
