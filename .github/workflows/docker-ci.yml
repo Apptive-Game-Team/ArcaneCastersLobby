@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - deploy
+      - magic-card
 
 jobs:
   build-and-push:
@@ -35,6 +36,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/deploy' }}
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=magic-card,enable=${{ github.ref == 'refs/heads/magic-card' }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
