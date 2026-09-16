@@ -48,6 +48,13 @@ class GameServerManagementService(
     fun getAvailableServer(): Server? = getAvailableServers().firstOrNull()
 
     /**
+     * Address to call [server] on. Delegates to [ServerHealthRegistry.callUrl] so
+     * [com.wordonline.matching.session.service.LegacyGameMatchService] does not need its own
+     * dependency on the registry just to read this one value.
+     */
+    fun callUrl(server: Server): String = serverHealthRegistry.callUrl(server)
+
+    /**
      * Refreshes discovery and health together.
      *
      * `fixedDelay` rather than `fixedRate`: a slow refresh must not queue further refreshes
@@ -77,16 +84,50 @@ class GameServerManagementService(
         Unit
     }
 
+    /**
+     * Probes [server] and records which address, if any, actually answered.
+     *
+     * [Server.internalBaseUrl] is tried first when set. A configured internal address that
+     * only the public address answers for is a real, expected state - the game server can be
+     * on infrastructure outside this lobby's docker network - so that case is recorded as
+     * healthy (on the public address) rather than unhealthy, with a WARN so the misconfigured
+     * internal address gets noticed and fixed instead of quietly costing every request a
+     * failed internal attempt first.
+     */
     private suspend fun probe(server: Server) {
-        val healthy = try {
-            // getUrl() throws when protocol/domain/port are null, so it belongs inside the guard.
-            gameServerClient.healthcheck(server.url)
+        val respondingUrl = try {
+            resolveRespondingUrl(server)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Do not re-read server.url here: if protocol/domain/port are all unset, it throws
+            // again and masks the original failure with a new one.
             log.warn("Healthcheck error for game server {}: {}", server.id, e.toString())
-            false
+            null
         }
-        serverHealthRegistry.recordProbe(server.id, healthy)
+        serverHealthRegistry.recordProbe(server.id, healthy = respondingUrl != null, respondingUrl = respondingUrl)
+    }
+
+    private suspend fun resolveRespondingUrl(server: Server): String? {
+        val internalUrl = server.internalBaseUrl
+        if (internalUrl != null && gameServerClient.healthcheck(internalUrl)) {
+            return internalUrl
+        }
+
+        val publicUrl = server.url
+        if (!gameServerClient.healthcheck(publicUrl)) {
+            return null
+        }
+
+        if (internalUrl != null) {
+            log.warn(
+                "Game server {} has internal_base_url {} configured but only answered on its public address {}; " +
+                    "the internal address is likely misconfigured or unreachable from this lobby.",
+                server.id,
+                internalUrl,
+                publicUrl,
+            )
+        }
+        return publicUrl
     }
 }

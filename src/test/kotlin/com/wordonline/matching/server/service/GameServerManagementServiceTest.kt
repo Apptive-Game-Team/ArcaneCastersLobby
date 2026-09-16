@@ -12,7 +12,9 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.stub
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import reactor.core.publisher.Flux
 
@@ -30,7 +32,7 @@ class GameServerManagementServiceTest {
     private val gameServerManagementService =
         GameServerManagementService(serverRepository, gameServerClient, serverHealthRegistry)
 
-    private fun server(id: Long, domain: String, state: ServerState): Server =
+    private fun server(id: Long, domain: String, state: ServerState, internalBaseUrl: String? = null): Server =
         Server(
             id = id,
             protocol = "http",
@@ -38,6 +40,7 @@ class GameServerManagementServiceTest {
             port = 9090,
             state = state,
             type = ServerType.GAME,
+            internalBaseUrl = internalBaseUrl,
         )
 
     private fun stubDiscovery(vararg servers: Server) {
@@ -146,6 +149,61 @@ class GameServerManagementServiceTest {
         gameServerManagementService.refresh()
         assertThat(serverHealthRegistry.consecutiveFailures(1L)).isEqualTo(failureThreshold)
         assertThat(availableIds()).isEmpty()
+    }
+
+    @Test
+    fun `internal_base_url이 있는 서버는 healthcheck을 내부 주소로 보낸다`() = runTest {
+        val internalUrl = "http://ac-game-alpha:8080"
+        stubDiscovery(server(1L, "alpha", ServerState.ACTIVE, internalBaseUrl = internalUrl))
+        stubHealthcheck(internalUrl, true)
+
+        gameServerManagementService.refresh()
+
+        assertThat(availableIds()).containsExactly(1L)
+        verify(gameServerClient, never()).healthcheck(alphaUrl)
+    }
+
+    @Test
+    fun `내부 주소로 healthcheck이 성공하면 그 주소가 응답 주소로 기록된다`() = runTest {
+        val internalUrl = "http://ac-game-alpha:8080"
+        stubDiscovery(server(1L, "alpha", ServerState.ACTIVE, internalBaseUrl = internalUrl))
+        stubHealthcheck(internalUrl, true)
+
+        gameServerManagementService.refresh()
+
+        assertThat(serverHealthRegistry.respondingUrl(1L)).isEqualTo(internalUrl)
+    }
+
+    @Test
+    fun `내부 주소가 실패하고 공개 주소가 성공하면 healthy로 남고 공개 주소가 기록된다`() = runTest {
+        val internalUrl = "http://ac-game-alpha:8080"
+        stubDiscovery(server(1L, "alpha", ServerState.ACTIVE, internalBaseUrl = internalUrl))
+        // The internal address is configured but unreachable from this lobby - e.g. the game
+        // server lives on separate infrastructure - while the public address still works.
+        stubHealthcheck(internalUrl, false)
+        stubHealthcheck(alphaUrl, true)
+
+        gameServerManagementService.refresh()
+
+        assertThat(availableIds())
+            .`as`("공개 주소로만 닿아도 서버는 healthy로 남아야 한다")
+            .containsExactly(1L)
+        assertThat(serverHealthRegistry.respondingUrl(1L))
+            .`as`("응답 주소는 실제로 답한 공개 주소여야 한다 - 이 상태가 misconfigured internal_base_url을 WARN으로 남기는 조건이다")
+            .isEqualTo(alphaUrl)
+    }
+
+    @Test
+    fun `내부 주소와 공개 주소 모두 healthcheck에 실패하면 unhealthy로 남는다`() = runTest {
+        val internalUrl = "http://ac-game-alpha:8080"
+        stubDiscovery(server(1L, "alpha", ServerState.ACTIVE, internalBaseUrl = internalUrl))
+        stubHealthcheck(internalUrl, false)
+        stubHealthcheck(alphaUrl, false)
+
+        gameServerManagementService.refresh()
+
+        assertThat(availableIds()).isEmpty()
+        assertThat(serverHealthRegistry.isHealthy(1L)).isFalse()
     }
 
     @Test

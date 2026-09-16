@@ -18,7 +18,7 @@ Related repositories:
 - `./gradlew bootRun`: run the Spring Boot app locally.
 - `./gradlew bootJar`: create the deployable Spring Boot jar.
 
-Local runs require environment variables from `application.yml`: `PORT`, `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `ACCOUNT_SERVER_URL`, `JWT_PRIVATE_KEY`, and `JWT_PUBLIC_KEY`. For schema questions, inspect `../database/migration`.
+Local runs require environment variables from `application.yml`: `PORT`, `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, and `ACCOUNT_SERVER_URL`. The lobby verifies every JWT against the account server's JWK Set at `ACCOUNT_SERVER_URL` + `/.well-known/jwks`, so it holds no signing key of its own. For schema questions, inspect `../database/migration`.
 
 ## Coding Style & Naming Conventions
 
