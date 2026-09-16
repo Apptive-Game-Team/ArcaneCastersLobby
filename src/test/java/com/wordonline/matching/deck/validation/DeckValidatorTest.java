@@ -48,21 +48,21 @@ class DeckValidatorTest {
     }
 
     @Test
-    void isValid_ReturnsTrue_WhenDeckSizeIsNotFifteen() {
-        stubCards();
-        stubOwnedCards(1L, 2L);
-
+    void isValid_ReturnsFalse_WhenDeckSizeIsNotFifteen() {
         StepVerifier.create(deckValidator.isValid(USER_ID, List.of(1L, 2L)))
-                .expectNext(true)
+                .expectNext(false)
                 .verifyComplete();
     }
 
     @Test
     void isValid_ReturnsTrue_WhenEveryCardSharesOneElement() {
         stubCards();
-        stubOwnedCards(1L, 2L, 3L);
+        stubOwnedCards(1L, 2L, 3L, 4L, 5L);
 
-        StepVerifier.create(deckValidator.isValid(USER_ID, List.of(1L, 2L, 3L)))
+        StepVerifier.create(deckValidator.isValid(USER_ID, List.of(
+                        1L, 1L, 1L, 2L, 2L, 2L, 3L, 3L, 3L,
+                        4L, 4L, 4L, 5L, 5L, 5L
+                )))
                 .expectNext(true)
                 .verifyComplete();
     }
@@ -71,21 +71,21 @@ class DeckValidatorTest {
     void isValid_ReturnsTrue_WhenSameCardIsMoreThanThreeAndOwned() {
         stubCards();
         when(userCardRepository.findAllByUserId(USER_ID)).thenReturn(Flux.just(
-                new UserCard(USER_ID, 1L, 5)
+                new UserCard(USER_ID, 1L, 15)
         ));
 
-        StepVerifier.create(deckValidator.isValid(USER_ID, List.of(1L, 1L, 1L, 1L, 1L)))
+        StepVerifier.create(deckValidator.isValid(USER_ID, List.of(
+                        1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L,
+                        1L, 1L, 1L, 1L, 1L, 1L
+                )))
                 .expectNext(true)
                 .verifyComplete();
     }
 
     @Test
-    void isValid_ReturnsTrue_WhenDeckIsEmpty() {
-        stubCards();
-        stubOwnedCards(1L);
-
+    void isValid_ReturnsFalse_WhenDeckIsEmpty() {
         StepVerifier.create(deckValidator.isValid(USER_ID, List.of()))
-                .expectNext(true)
+                .expectNext(false)
                 .verifyComplete();
     }
 
