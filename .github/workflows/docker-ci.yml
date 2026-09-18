@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - dev
-      - deploy
-      - magic-card
+    tags:
+      - 'v*'
 
 jobs:
   build-and-push:
@@ -34,7 +34,8 @@ jobs:
         with:
           images: ghcr.io/apptive-game-team/ac-lobby
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/deploy' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
 
       - name: Build and push
