@@ -87,7 +87,8 @@ public class WebSecurityConfig {
     SecurityWebFilterChain springSecurityFilterChain(
             ServerHttpSecurity http,
             ReactiveJwtDecoder jwtDecoder,
-            ReactiveJwtAuthenticationConverterAdapter jwtAuthenticationConverter
+            ReactiveJwtAuthenticationConverterAdapter jwtAuthenticationConverter,
+            CorsProperties corsProperties
     ) {
         http
                 .authorizeExchange(exchange -> exchange
@@ -105,7 +106,7 @@ public class WebSecurityConfig {
                 })
         );
 
-        http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource(corsProperties)));
 
         http.formLogin(ServerHttpSecurity.FormLoginSpec::disable);
         http.logout(ServerHttpSecurity.LogoutSpec::disable);
@@ -119,9 +120,15 @@ public class WebSecurityConfig {
         return http.build();
     }
 
-    private CorsConfigurationSource corsConfigurationSource() {
+    /**
+     * Credentials are allowed here, so the origins come from {@link CorsProperties} instead of
+     * a pattern. A wildcard together with credentials would make Spring reflect any caller's
+     * Origin back, letting any website call the lobby through a logged-in member's browser;
+     * {@code CorsProperties} rejects that value at startup.
+     */
+    CorsConfigurationSource corsConfigurationSource(CorsProperties corsProperties) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.addAllowedOriginPattern("*");
+        corsProperties.getOriginPatterns().forEach(configuration::addAllowedOriginPattern);
         configuration.addAllowedMethod("*");
         configuration.addAllowedHeader("*");
         configuration.setAllowCredentials(true);
