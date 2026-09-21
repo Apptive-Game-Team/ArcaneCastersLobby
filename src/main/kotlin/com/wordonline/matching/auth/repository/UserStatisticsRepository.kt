@@ -32,9 +32,14 @@ data class UserStatisticsOverviewCounts(
  * outcome, which also means a session still `IN_PROGRESS` (`statistic_game_id IS NULL`) is
  * excluded by the join itself.
  *
- * Two assumptions from issue #27 are baked into [MATCHING_GAMES_WHERE]: `Practice` games are not
- * part of a player's record, and an `ABANDONED` game has no winner to report, so both are left out
- * of every count and listing here.
+ * [MATCHING_GAMES_WHERE] filters on outcome only. Every `game_type` counts: `SessionType.Practice`
+ * is not a warm-up mode but every bot match, both the player-vs-bot one and `BotGameScheduler`'s
+ * automatic games, and `PVE` is an adventure scenario. Excluding `Practice` was tried first and hid
+ * every game a player had actually played, since bot matches are most of them. A bot-vs-bot
+ * automatic game still never reaches a player's list: neither participant is the requesting user.
+ *
+ * `ABANDONED` stays out. It has no winner to report, and a session the watchdog reaped is not a
+ * result. `gameType` rides along on each row so the screen can label or filter what this does not.
  */
 @Repository
 class UserStatisticsRepository(
@@ -114,7 +119,6 @@ class UserStatisticsRepository(
     private companion object {
         const val MATCHING_GAMES_WHERE = """
             (sgs.left_user_id = :userId OR sgs.right_user_id = :userId)
-            AND sgs.game_type <> 'Practice'
             AND sg.outcome <> 'ABANDONED'
         """
     }
