@@ -13,12 +13,12 @@ public interface MagicRepository extends R2dbcRepository<Magic, Long> {
     @Query("""
         SELECT m.*
         FROM magics m
-        WHERE m.player_castable = true
+        WHERE m.purpose = 'PLAYER'
     """)
-    Flux<Magic> findAllPlayerCastable();
+    Flux<Magic> findAllPlayerMagics();
 
     // Change detection and the version read the whole table, including the rows the payload
-    // leaves out. A magic that turns player_castable = false drops out of the payload without
+    // leaves out. A magic whose purpose stops being PLAYER drops out of the payload without
     // changing anything inside it, so a version taken from the payload alone would leave every
     // cached client on the old list. The two also have to count the same rows: a version taken
     // from the payload while detection reads the whole table reports that same change on every

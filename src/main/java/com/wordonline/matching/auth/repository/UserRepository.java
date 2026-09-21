@@ -47,7 +47,7 @@ WHERE id = :userId;
                 SELECT :userId, m.id, 3
                 FROM magics m
                 WHERE m.access_type = 'DEFAULT'
-                AND m.player_castable = true
+                AND m.purpose = 'PLAYER'
             );
             """
     )

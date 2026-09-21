@@ -47,7 +47,7 @@ public class MagicDataService {
 
     private Mono<MagicsResponse> buildFullSnapshot(String fallbackVersion, boolean requiresRefresh) {
         return Mono.zip(
-                        magicRepository.findAllPlayerCastable().collectList(),
+                        magicRepository.findAllPlayerMagics().collectList(),
                         magicQueryRepository.findAllWithManaCostAndIndicator().collectList(),
                         magicRepository.findMaxUpdatedAt()
                                 .map(Optional::of)

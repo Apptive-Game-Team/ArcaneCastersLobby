@@ -43,7 +43,7 @@ class MagicDataServiceTest {
 
         when(magicRepository.findAllUpdatedSince(any()))
                 .thenReturn(Flux.just(changedMagic));
-        when(magicRepository.findAllPlayerCastable())
+        when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(unchangedMagic, changedMagic));
         when(magicRepository.findMaxUpdatedAt())
                 .thenReturn(Mono.just(changedAt));
@@ -69,7 +69,7 @@ class MagicDataServiceTest {
         LocalDateTime updatedAt = LocalDateTime.parse("2024-01-02T12:00:00");
         Magic magic = new Magic(10L, "fireball", "Fire", updatedAt);
 
-        when(magicRepository.findAllPlayerCastable())
+        when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(magic));
         when(magicRepository.findMaxUpdatedAt())
                 .thenReturn(Mono.just(updatedAt));
@@ -114,7 +114,7 @@ class MagicDataServiceTest {
 
         when(magicRepository.findAllUpdatedSince(any()))
                 .thenReturn(Flux.just(hiddenMagic));
-        when(magicRepository.findAllPlayerCastable())
+        when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(visibleMagic));
         when(magicRepository.findMaxUpdatedAt())
                 .thenReturn(Mono.just(hiddenChangedAt));
