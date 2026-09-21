@@ -2,10 +2,18 @@ package com.wordonline.matching.magic.dto;
 
 import com.fasterxml.jackson.annotation.JsonRawValue;
 
+import java.util.List;
+
 public record MagicDto(
         Long id,
         String name,
         String element,
+        /**
+         * Every element of the magic, read from {@code prefab_elements} for
+         * {@code magics.prefab}. Falls back to a single-element list holding
+         * {@code element} when the magic has no prefab or the prefab has no rows there.
+         */
+        List<String> elements,
         Integer manaCost,
         /**
          * jsonb document from {@code magics.indicator}, carried through as-is. The lobby

@@ -67,8 +67,12 @@ public class MagicDataService {
                                 Integer manaCost = row != null && row.manaCost() != null
                                         ? row.manaCost().intValue() : null;
                                 String indicator = row != null ? row.indicator() : null;
+                                List<String> elements = row != null && row.elements() != null
+                                        && !row.elements().isBlank()
+                                        ? List.of(row.elements().split(","))
+                                        : List.of(magic.getElement());
                                 return new MagicDto(magic.getId(), magic.getName(), magic.getElement(),
-                                        manaCost, indicator);
+                                        elements, manaCost, indicator);
                             })
                             .collect(Collectors.toList());
 

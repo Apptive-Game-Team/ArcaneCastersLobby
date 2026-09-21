@@ -22,6 +22,7 @@ class MagicDtoSerializationTest {
             34L,
             "leafair",
             "Nature",
+            listOf("Nature"),
             10,
             """{"version":1,"layers":[{"shape":"circle","origin":"target","radius":{"parameter":"radius"}}]}""",
         )
@@ -37,7 +38,7 @@ class MagicDtoSerializationTest {
 
     @Test
     fun `null indicator serializes as JSON null, not the literal text null`() {
-        val dto = MagicDto(1L, "fireball", "Fire", 15, null)
+        val dto = MagicDto(1L, "fireball", "Fire", listOf("Fire"), 15, null)
 
         val json = objectMapper.readTree(objectMapper.writeValueAsString(dto))
 

@@ -5,6 +5,12 @@ public record MagicListRow(
         String name,
         String element,
         Double manaCost,
-        String indicator
+        String indicator,
+        /**
+         * Comma-separated {@code prefab_elements.element} values for {@code magics.prefab},
+         * ordered by element name ({@code string_agg(pe.element, ',' order by pe.element)}).
+         * {@code null} when the magic has no prefab or the prefab has no rows.
+         */
+        String elements
 ) {
 }
