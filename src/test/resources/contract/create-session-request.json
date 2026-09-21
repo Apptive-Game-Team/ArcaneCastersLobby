@@ -4,5 +4,7 @@
   "uid1": 1,
   "uid2": 2,
   "sessionType": "PVP",
-  "scenarioId": null
+  "scenarioId": null,
+  "leftDeckCardIds": null,
+  "rightDeckCardIds": null
 }

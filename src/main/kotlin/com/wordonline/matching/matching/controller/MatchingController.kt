@@ -3,12 +3,13 @@ package com.wordonline.matching.matching.controller
 import com.wordonline.matching.auth.service.UserId
 import com.wordonline.matching.matching.config.MatchEventStreamProperties
 import com.wordonline.matching.matching.dto.MatchedInfoDto
+import com.wordonline.matching.matching.dto.CancelMatchResponseDto
+import com.wordonline.matching.matching.dto.MatchTicketRequest
+import com.wordonline.matching.matching.dto.MatchTicketResponse
 import com.wordonline.matching.matching.dto.QueueLengthResponseDto
 import com.wordonline.matching.matching.dto.SimpleMessageDto
 import com.wordonline.matching.matching.service.GameMatchService
 import com.wordonline.matching.matching.service.SessionLostReportService
-import com.wordonline.matching.matching.domain.CancelMatchResponse
-import com.wordonline.matching.matching.domain.MatchTicket
 import com.wordonline.matching.matching.domain.SessionLostReport
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.bind.annotation.RequestBody
 
 @RestController
 class MatchingController(
@@ -43,7 +45,12 @@ class MatchingController(
     }
 
     @PostMapping("/api/match/tickets")
-    suspend fun createTicket(@UserId userId: Long?): MatchTicket = gameMatchService.createTicket(userId!!)
+    suspend fun createTicket(
+        @UserId userId: Long?,
+        @RequestBody(required = false) request: MatchTicketRequest?,
+    ): MatchTicketResponse = MatchTicketResponse.from(
+        gameMatchService.createTicket(userId!!, request?.deckMode ?: MatchTicketRequest().deckMode),
+    )
 
     @GetMapping("/api/match/queue/me/exist")
     suspend fun isMeInQueue(@UserId userId: Long?): ResponseEntity<Unit> {
@@ -55,18 +62,20 @@ class MatchingController(
     }
 
     @DeleteMapping("/api/match/queue/me")
-    suspend fun removeFromQueue(@UserId userId: Long?): CancelMatchResponse = gameMatchService.removeFromQueue(userId!!)
+    suspend fun removeFromQueue(@UserId userId: Long?): CancelMatchResponseDto =
+        CancelMatchResponseDto.from(gameMatchService.removeFromQueue(userId!!))
 
     @DeleteMapping("/api/match/tickets/{ticketId}")
     suspend fun cancelTicket(
         @UserId userId: Long?,
         @PathVariable ticketId: String,
-    ): CancelMatchResponse = gameMatchService.cancelTicket(userId!!, ticketId)
+    ): CancelMatchResponseDto = CancelMatchResponseDto.from(gameMatchService.cancelTicket(userId!!, ticketId))
 
     @GetMapping("/api/match/tickets/active")
-    suspend fun getActiveTicket(@UserId userId: Long?): ResponseEntity<MatchTicket> {
+    suspend fun getActiveTicket(@UserId userId: Long?): ResponseEntity<MatchTicketResponse> {
         val ticket = gameMatchService.getActiveTicket(userId!!)
-        return if (ticket == null) ResponseEntity.notFound().build() else ResponseEntity.ok(ticket)
+        return if (ticket == null) ResponseEntity.notFound().build()
+        else ResponseEntity.ok(MatchTicketResponse.from(ticket))
     }
 
     /**
@@ -84,10 +93,10 @@ class MatchingController(
     suspend fun reportSessionLost(
         @UserId userId: Long?,
         @PathVariable sessionId: String,
-    ): ResponseEntity<MatchTicket> = when (val report = sessionLostReportService.report(userId!!, sessionId)) {
-        is SessionLostReport.Released -> ResponseEntity.ok(report.ticket)
-        is SessionLostReport.NothingToRelease -> ResponseEntity.ok(report.ticket)
-        is SessionLostReport.SessionAlive -> ResponseEntity.status(HttpStatus.CONFLICT).body(report.ticket)
+    ): ResponseEntity<MatchTicketResponse> = when (val report = sessionLostReportService.report(userId!!, sessionId)) {
+        is SessionLostReport.Released -> ResponseEntity.ok(MatchTicketResponse.from(report.ticket))
+        is SessionLostReport.NothingToRelease -> ResponseEntity.ok(MatchTicketResponse.from(report.ticket))
+        is SessionLostReport.SessionAlive -> ResponseEntity.status(HttpStatus.CONFLICT).body(MatchTicketResponse.from(report.ticket))
         SessionLostReport.UnknownSession -> ResponseEntity.notFound().build()
     }
 
@@ -101,14 +110,14 @@ class MatchingController(
      * for the protocol.
      */
     @GetMapping("/api/match/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
-    fun events(@UserId userId: Long?, response: ServerHttpResponse): Flow<ServerSentEvent<MatchTicket>> {
+    fun events(@UserId userId: Long?, response: ServerHttpResponse): Flow<ServerSentEvent<MatchTicketResponse>> {
         // nginx buffers a proxied response by default; `no-transform` stops a proxy from
         // gzipping the stream, which would buffer it just as effectively.
         response.headers.set("X-Accel-Buffering", "no")
         response.headers.cacheControl = "no-cache, no-transform"
 
         val ticketUpdates = gameMatchService.events(userId!!).map { ticket ->
-            ServerSentEvent.builder(ticket)
+            ServerSentEvent.builder(MatchTicketResponse.from(ticket))
                 .id(ticket.version.toString())
                 .event("match-ticket-updated")
                 .build()
@@ -120,8 +129,8 @@ class MatchingController(
      * Emits once immediately so the response headers and a first byte reach the client before
      * any ticket update, then keeps the stream warm.
      */
-    private fun heartbeats(): Flow<ServerSentEvent<MatchTicket>> = flow {
-        val heartbeat = ServerSentEvent.builder<MatchTicket>().comment("keep-alive").build()
+    private fun heartbeats(): Flow<ServerSentEvent<MatchTicketResponse>> = flow {
+        val heartbeat = ServerSentEvent.builder<MatchTicketResponse>().comment("keep-alive").build()
         while (true) {
             emit(heartbeat)
             delay(matchEventStreamProperties.heartbeatInterval.toMillis())
