@@ -30,9 +30,14 @@ public interface MagicRepository extends R2dbcRepository<Magic, Long> {
     """)
     Flux<Magic> findAllUpdatedSince(LocalDateTime timestamp);
 
+    // R2DBC 는 @Query 결과를 entity 로 읽으므로 max(updated_at) 같은 값 하나짜리 select 가
+    // "didn't find a PersistentEntity for java.time.LocalDateTime" 으로 깨진다. 가장 최근 행을
+    // 그대로 읽고 서비스가 그 컬럼을 꺼낸다.
     @Query("""
-        SELECT max(m.updated_at)
+        SELECT m.*
         FROM magics m
+        ORDER BY m.updated_at DESC NULLS LAST
+        LIMIT 1
     """)
-    Mono<LocalDateTime> findMaxUpdatedAt();
+    Mono<Magic> findLatestUpdated();
 }

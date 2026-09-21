@@ -49,7 +49,8 @@ public class MagicDataService {
         return Mono.zip(
                         magicRepository.findAllPlayerMagics().collectList(),
                         magicQueryRepository.findAllWithManaCostAndIndicator().collectList(),
-                        magicRepository.findMaxUpdatedAt()
+                        magicRepository.findLatestUpdated()
+                                .mapNotNull(Magic::getUpdatedAt)
                                 .map(Optional::of)
                                 .defaultIfEmpty(Optional.empty()))
                 .map(tuple -> {
