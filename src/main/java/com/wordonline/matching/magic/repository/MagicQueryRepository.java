@@ -12,7 +12,6 @@ public interface MagicQueryRepository extends R2dbcRepository<Magic, Long> {
 select
   m.id as "id",
   m.name as "name",
-  m.element as "element",
   mana.value as "mana_cost",
   m.indicator::text as "indicator",
   pe.elements as "elements"

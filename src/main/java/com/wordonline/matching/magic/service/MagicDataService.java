@@ -71,7 +71,7 @@ public class MagicDataService {
                                         && !row.elements().isBlank()
                                         ? List.of(row.elements().split(","))
                                         : List.of(magic.getElement());
-                                return new MagicDto(magic.getId(), magic.getName(), magic.getElement(),
+                                return new MagicDto(magic.getId(), magic.getName(),
                                         elements, manaCost, indicator);
                             })
                             .collect(Collectors.toList());

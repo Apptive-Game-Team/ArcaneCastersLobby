@@ -7,11 +7,12 @@ import java.util.List;
 public record MagicDto(
         Long id,
         String name,
-        String element,
         /**
          * Every element of the magic, read from {@code prefab_elements} for
          * {@code magics.prefab}. Falls back to a single-element list holding
-         * {@code element} when the magic has no prefab or the prefab has no rows there.
+         * {@code magics.element} when the magic has no prefab or the prefab has no rows
+         * there. The single {@code element} field is gone: it held one value for magics
+         * that carry several, so the list is the only element the response states.
          */
         List<String> elements,
         Integer manaCost,

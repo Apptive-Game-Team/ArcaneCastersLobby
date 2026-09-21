@@ -40,7 +40,7 @@ class DataControllerTest {
         // The response body is checked as raw JSON instead, confirming the document comes
         // back as an inline JSON object rather than an escaped string.
         String indicatorJson = "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}";
-        MagicDto magicDto = new MagicDto(1L, "cloud_dragon", "Water", List.of("Lightning", "Water", "Wind"), 15,
+        MagicDto magicDto = new MagicDto(1L, "cloud_dragon", List.of("Lightning", "Water", "Wind"), 15,
                 indicatorJson);
         MagicsResponse mockResponse = new MagicsResponse("2024-01-01T00:00:00", List.of(magicDto), true);
 
@@ -57,7 +57,7 @@ class DataControllerTest {
                 .jsonPath("$.magics.length()").isEqualTo(1)
                 .jsonPath("$.magics[0].id").isEqualTo(1)
                 .jsonPath("$.magics[0].name").isEqualTo("cloud_dragon")
-                .jsonPath("$.magics[0].element").isEqualTo("Water")
+                .jsonPath("$.magics[0].element").doesNotExist()
                 .jsonPath("$.magics[0].elements.length()").isEqualTo(3)
                 .jsonPath("$.magics[0].elements[0]").isEqualTo("Lightning")
                 .jsonPath("$.magics[0].elements[1]").isEqualTo("Water")
@@ -72,7 +72,7 @@ class DataControllerTest {
     @Test
     @DisplayName("마법_조회_indicator_없음_null로_반환")
     void getMagics_WithoutIndicator_ReturnsJsonNull() {
-        MagicDto magicDto = new MagicDto(2L, "ice_wall", "Water", List.of("Water"), 20, null);
+        MagicDto magicDto = new MagicDto(2L, "ice_wall", List.of("Water"), 20, null);
         MagicsResponse mockResponse = new MagicsResponse("2024-01-01T00:00:00", List.of(magicDto), true);
 
         when(magicDataService.getMagics(isNull())).thenReturn(Mono.just(mockResponse));
@@ -90,7 +90,7 @@ class DataControllerTest {
     @Test
     @DisplayName("마법_조회_prefab_원소_없음_element_하나로_폴백")
     void getMagics_WithoutPrefabElements_FallsBackToSingleElement() {
-        MagicDto magicDto = new MagicDto(8L, "will_o_wisp", "Nature", List.of("Nature"), 5, null);
+        MagicDto magicDto = new MagicDto(8L, "will_o_wisp", List.of("Nature"), 5, null);
         MagicsResponse mockResponse = new MagicsResponse("2024-01-01T00:00:00", List.of(magicDto), true);
 
         when(magicDataService.getMagics(isNull())).thenReturn(Mono.just(mockResponse));
