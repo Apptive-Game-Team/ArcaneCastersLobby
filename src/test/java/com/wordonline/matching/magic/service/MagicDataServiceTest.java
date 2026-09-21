@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -49,9 +50,10 @@ class MagicDataServiceTest {
                 .thenReturn(Mono.just(changedAt));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(
-                        new MagicListRow(10L, "fireball", "Fire", 15.0,
-                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"),
-                        new MagicListRow(20L, "ice_wall", "Water", 20.0, null)
+                        new MagicListRow(10L, "fireball", 15.0,
+                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}",
+                                "Fire,Lightning,Water"),
+                        new MagicListRow(20L, "ice_wall", 20.0, null, null)
                 ));
 
         StepVerifier.create(magicDataService.getMagics(currentVersion))
@@ -74,8 +76,8 @@ class MagicDataServiceTest {
         when(magicRepository.findMaxUpdatedAt())
                 .thenReturn(Mono.just(updatedAt));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
-                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", "Fire", 15.0,
-                        "{\"version\":1,\"layers\":[]}")));
+                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0,
+                        "{\"version\":1,\"layers\":[]}", "Fire")));
 
         StepVerifier.create(magicDataService.getMagics(null))
                 .assertNext(response -> {
@@ -119,7 +121,7 @@ class MagicDataServiceTest {
         when(magicRepository.findMaxUpdatedAt())
                 .thenReturn(Mono.just(hiddenChangedAt));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
-                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", "Fire", 15.0, null)));
+                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0, null, "Fire")));
 
         StepVerifier.create(magicDataService.getMagics(currentVersion))
                 .assertNext(response -> {
@@ -136,14 +138,14 @@ class MagicDataServiceTest {
         assert response.magics().stream().anyMatch(magic ->
                 magic.id().equals(10L)
                         && magic.name().equals("fireball")
-                        && magic.element().equals("Fire")
+                        && magic.elements().equals(List.of("Fire", "Lightning", "Water"))
                         && magic.manaCost().equals(15)
                         && magic.indicator().equals(
                                 "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"));
         assert response.magics().stream().anyMatch(magic ->
                 magic.id().equals(20L)
                         && magic.name().equals("ice_wall")
-                        && magic.element().equals("Water")
+                        && magic.elements().equals(List.of("Water"))
                         && magic.manaCost().equals(20)
                         && magic.indicator() == null);
     }
