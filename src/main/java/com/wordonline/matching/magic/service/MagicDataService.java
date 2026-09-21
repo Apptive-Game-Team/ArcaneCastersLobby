@@ -48,7 +48,7 @@ public class MagicDataService {
 
     private Mono<MagicsResponse> buildFullSnapshot(String fallbackVersion, boolean requiresRefresh) {
         return Mono.zip(
-                        magicRepository.findAll().collectList(),
+                        magicRepository.findAllPlayerCastable().collectList(),
                         magicQueryRepository.findAllWithManaCostAndIndicator().collectList())
                 .map(tuple -> {
                     List<Magic> magics = tuple.getT1();

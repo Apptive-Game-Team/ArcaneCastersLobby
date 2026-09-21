@@ -19,6 +19,7 @@ from magics m
 left join game_objects go on go.name = m.name
 left join parameters mp on mp.name = 'mana_cost'
 left join parameter_values mana on mana.game_object_id = go.id and mana.parameter_id = mp.id
+where m.player_castable = true
 order by m.id
 """)
     Flux<MagicListRow> findAllWithManaCostAndIndicator();

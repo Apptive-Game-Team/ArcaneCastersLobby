@@ -12,7 +12,15 @@ public interface MagicRepository extends R2dbcRepository<Magic, Long> {
     @Query("""
         SELECT m.*
         FROM magics m
+        WHERE m.player_castable = true
+    """)
+    Flux<Magic> findAllPlayerCastable();
+
+    @Query("""
+        SELECT m.*
+        FROM magics m
         WHERE m.updated_at > :timestamp
+        AND m.player_castable = true
     """)
     Flux<Magic> findAllUpdatedSince(LocalDateTime timestamp);
 }
