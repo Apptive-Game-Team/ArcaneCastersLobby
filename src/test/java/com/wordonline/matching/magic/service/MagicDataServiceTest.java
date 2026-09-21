@@ -12,6 +12,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
@@ -44,6 +45,8 @@ class MagicDataServiceTest {
                 .thenReturn(Flux.just(changedMagic));
         when(magicRepository.findAllPlayerCastable())
                 .thenReturn(Flux.just(unchangedMagic, changedMagic));
+        when(magicRepository.findMaxUpdatedAt())
+                .thenReturn(Mono.just(changedAt));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(
                         new MagicListRow(10L, "fireball", "Fire", 15.0,
@@ -68,6 +71,8 @@ class MagicDataServiceTest {
 
         when(magicRepository.findAllPlayerCastable())
                 .thenReturn(Flux.just(magic));
+        when(magicRepository.findMaxUpdatedAt())
+                .thenReturn(Mono.just(updatedAt));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(new MagicListRow(10L, "fireball", "Fire", 15.0,
                         "{\"version\":1,\"layers\":[]}")));
@@ -94,6 +99,34 @@ class MagicDataServiceTest {
                     assert response.magics().isEmpty();
                     assert response.version().equals(currentVersion);
                     assert !response.requiresRefresh();
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("목록에서_빠진_마법이_바뀌어도_버전이_올라간다")
+    void getMagics_VersionCoversMagicsMissingFromThePayload() {
+        String currentVersion = "2024-01-01T00:00:00";
+        LocalDateTime hiddenChangedAt = LocalDateTime.parse("2024-01-03T09:00:00");
+
+        Magic hiddenMagic = new Magic(30L, "pve_nature_slime_nest", "Nature", hiddenChangedAt);
+        Magic visibleMagic = new Magic(10L, "fireball", "Fire", LocalDateTime.parse("2024-01-01T00:00:00"));
+
+        when(magicRepository.findAllUpdatedSince(any()))
+                .thenReturn(Flux.just(hiddenMagic));
+        when(magicRepository.findAllPlayerCastable())
+                .thenReturn(Flux.just(visibleMagic));
+        when(magicRepository.findMaxUpdatedAt())
+                .thenReturn(Mono.just(hiddenChangedAt));
+        when(magicQueryRepository.findAllWithManaCostAndIndicator())
+                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", "Fire", 15.0, null)));
+
+        StepVerifier.create(magicDataService.getMagics(currentVersion))
+                .assertNext(response -> {
+                    assert response.magics().size() == 1;
+                    assert response.magics().get(0).id().equals(10L);
+                    assert response.version().equals("2024-01-03T09:00:00");
+                    assert response.requiresRefresh();
                 })
                 .verifyComplete();
     }
