@@ -46,8 +46,8 @@ class MagicDataServiceTest {
                 .thenReturn(Flux.just(changedMagic));
         when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(unchangedMagic, changedMagic));
-        when(magicRepository.findMaxUpdatedAt())
-                .thenReturn(Mono.just(changedAt));
+        when(magicRepository.findLatestUpdated())
+                .thenReturn(Mono.just(changedMagic));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(
                         new MagicListRow(10L, "fireball", 15.0,
@@ -73,8 +73,8 @@ class MagicDataServiceTest {
 
         when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(magic));
-        when(magicRepository.findMaxUpdatedAt())
-                .thenReturn(Mono.just(updatedAt));
+        when(magicRepository.findLatestUpdated())
+                .thenReturn(Mono.just(magic));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0,
                         "{\"version\":1,\"layers\":[]}", "Fire")));
@@ -118,8 +118,8 @@ class MagicDataServiceTest {
                 .thenReturn(Flux.just(hiddenMagic));
         when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(visibleMagic));
-        when(magicRepository.findMaxUpdatedAt())
-                .thenReturn(Mono.just(hiddenChangedAt));
+        when(magicRepository.findLatestUpdated())
+                .thenReturn(Mono.just(hiddenMagic));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0, null, "Fire")));
 
