@@ -9,6 +9,9 @@ import reactor.core.publisher.Flux;
 
 public interface CardListQueryRepository extends R2dbcRepository<Card, Long> {
 
+    // purpose 가 PLAYER 가 아닌 magics 행은 unlock_condition_type 이 NULL 이라 애초에 풀 방법이
+    // 없다. 필터 없이 그대로 내보내면 collection 화면에 count 0, unlock 문구 없이 영원히 잠긴
+    // 카드 한 줄이 남는다.
     @Query("""
 select
   m.id as "id",
@@ -34,6 +37,7 @@ left join user_magics um
 left join game_objects go on go.name = m.name
 left join parameters mp on mp.name = 'mana_cost'
 left join parameter_values mana on mana.game_object_id = go.id and mana.parameter_id = mp.id
+where m.purpose = 'PLAYER'
 order by m.id
 """)
     Flux<MyCardListRow> findMyCardList(long userId);

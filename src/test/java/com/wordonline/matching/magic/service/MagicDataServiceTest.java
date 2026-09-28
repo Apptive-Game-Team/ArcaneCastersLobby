@@ -12,9 +12,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -42,13 +44,16 @@ class MagicDataServiceTest {
 
         when(magicRepository.findAllUpdatedSince(any()))
                 .thenReturn(Flux.just(changedMagic));
-        when(magicRepository.findAll())
+        when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(unchangedMagic, changedMagic));
+        when(magicRepository.findLatestUpdated())
+                .thenReturn(Mono.just(changedMagic));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(
-                        new MagicListRow(10L, "fireball", "Fire", 15.0,
-                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"),
-                        new MagicListRow(20L, "ice_wall", "Water", 20.0, null)
+                        new MagicListRow(10L, "fireball", 15.0,
+                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}",
+                                "Fire,Lightning,Water"),
+                        new MagicListRow(20L, "ice_wall", 20.0, null, null)
                 ));
 
         StepVerifier.create(magicDataService.getMagics(currentVersion))
@@ -66,11 +71,13 @@ class MagicDataServiceTest {
         LocalDateTime updatedAt = LocalDateTime.parse("2024-01-02T12:00:00");
         Magic magic = new Magic(10L, "fireball", "Fire", updatedAt);
 
-        when(magicRepository.findAll())
+        when(magicRepository.findAllPlayerMagics())
                 .thenReturn(Flux.just(magic));
+        when(magicRepository.findLatestUpdated())
+                .thenReturn(Mono.just(magic));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
-                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", "Fire", 15.0,
-                        "{\"version\":1,\"layers\":[]}")));
+                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0,
+                        "{\"version\":1,\"layers\":[]}", "Fire")));
 
         StepVerifier.create(magicDataService.getMagics(null))
                 .assertNext(response -> {
@@ -98,19 +105,47 @@ class MagicDataServiceTest {
                 .verifyComplete();
     }
 
+    @Test
+    @DisplayName("목록에서_빠진_마법이_바뀌어도_버전이_올라간다")
+    void getMagics_VersionCoversMagicsMissingFromThePayload() {
+        String currentVersion = "2024-01-01T00:00:00";
+        LocalDateTime hiddenChangedAt = LocalDateTime.parse("2024-01-03T09:00:00");
+
+        Magic hiddenMagic = new Magic(30L, "pve_nature_slime_nest", "Nature", hiddenChangedAt);
+        Magic visibleMagic = new Magic(10L, "fireball", "Fire", LocalDateTime.parse("2024-01-01T00:00:00"));
+
+        when(magicRepository.findAllUpdatedSince(any()))
+                .thenReturn(Flux.just(hiddenMagic));
+        when(magicRepository.findAllPlayerMagics())
+                .thenReturn(Flux.just(visibleMagic));
+        when(magicRepository.findLatestUpdated())
+                .thenReturn(Mono.just(hiddenMagic));
+        when(magicQueryRepository.findAllWithManaCostAndIndicator())
+                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0, null, "Fire")));
+
+        StepVerifier.create(magicDataService.getMagics(currentVersion))
+                .assertNext(response -> {
+                    assert response.magics().size() == 1;
+                    assert response.magics().get(0).id().equals(10L);
+                    assert response.version().equals("2024-01-03T09:00:00");
+                    assert response.requiresRefresh();
+                })
+                .verifyComplete();
+    }
+
     private void assertFullMagicSnapshot(MagicsResponse response) {
         assert response.magics().size() == 2;
         assert response.magics().stream().anyMatch(magic ->
                 magic.id().equals(10L)
                         && magic.name().equals("fireball")
-                        && magic.element().equals("Fire")
+                        && magic.elements().equals(List.of("Fire", "Lightning", "Water"))
                         && magic.manaCost().equals(15)
                         && magic.indicator().equals(
                                 "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"));
         assert response.magics().stream().anyMatch(magic ->
                 magic.id().equals(20L)
                         && magic.name().equals("ice_wall")
-                        && magic.element().equals("Water")
+                        && magic.elements().equals(List.of("Water"))
                         && magic.manaCost().equals(20)
                         && magic.indicator() == null);
     }

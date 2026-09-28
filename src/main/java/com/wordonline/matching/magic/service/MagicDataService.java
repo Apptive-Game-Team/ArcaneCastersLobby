@@ -14,10 +14,9 @@ import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,8 +47,12 @@ public class MagicDataService {
 
     private Mono<MagicsResponse> buildFullSnapshot(String fallbackVersion, boolean requiresRefresh) {
         return Mono.zip(
-                        magicRepository.findAll().collectList(),
-                        magicQueryRepository.findAllWithManaCostAndIndicator().collectList())
+                        magicRepository.findAllPlayerMagics().collectList(),
+                        magicQueryRepository.findAllWithManaCostAndIndicator().collectList(),
+                        magicRepository.findLatestUpdated()
+                                .mapNotNull(Magic::getUpdatedAt)
+                                .map(Optional::of)
+                                .defaultIfEmpty(Optional.empty()))
                 .map(tuple -> {
                     List<Magic> magics = tuple.getT1();
                     if (magics.isEmpty()) {
@@ -65,20 +68,20 @@ public class MagicDataService {
                                 Integer manaCost = row != null && row.manaCost() != null
                                         ? row.manaCost().intValue() : null;
                                 String indicator = row != null ? row.indicator() : null;
-                                return new MagicDto(magic.getId(), magic.getName(), magic.getElement(),
-                                        manaCost, indicator);
+                                List<String> elements = row != null && row.elements() != null
+                                        && !row.elements().isBlank()
+                                        ? List.of(row.elements().split(","))
+                                        : List.of(magic.getElement());
+                                return new MagicDto(magic.getId(), magic.getName(),
+                                        elements, manaCost, indicator);
                             })
                             .collect(Collectors.toList());
 
-                    LocalDateTime maxUpdatedAt = magics.stream()
-                            .map(Magic::getUpdatedAt)
-                            .filter(Objects::nonNull)
-                            .max(Comparator.naturalOrder())
-                            .orElse(null);
-
-                    String version = (maxUpdatedAt != null)
-                            ? maxUpdatedAt.format(DateTimeFormatter.ISO_DATE_TIME)
-                            : fallbackVersion;
+                    // The version covers every magic row, not just the ones in this payload.
+                    // See MagicRepository.findAllUpdatedSince for why.
+                    String version = tuple.getT3()
+                            .map(maxUpdatedAt -> maxUpdatedAt.format(DateTimeFormatter.ISO_DATE_TIME))
+                            .orElse(fallbackVersion);
 
                     return new MagicsResponse(version, magicDtos, requiresRefresh);
                 });
