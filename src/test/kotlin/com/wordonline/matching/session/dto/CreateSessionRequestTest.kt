@@ -23,4 +23,23 @@ class CreateSessionRequestTest {
         assertThat(json["scenarioId"].isNull).isTrue()
         assertThat(json.has("session")).isFalse()
     }
+
+    @Test
+    fun `random deck card ids ride along as arrays`() {
+        val objectMapper = ObjectMapper()
+        val leftDeck = (1L..15L).toList()
+        val rightDeck = (16L..30L).toList()
+
+        val json = objectMapper.readTree(
+            objectMapper.writeValueAsString(
+                CreateSessionRequest(
+                    "attempt-1",
+                    SessionDto.PVP("session-1", 1L, 2L, leftDeck, rightDeck),
+                ),
+            ),
+        )
+
+        assertThat(json["leftDeckCardIds"].map { it.asLong() }).isEqualTo(leftDeck)
+        assertThat(json["rightDeckCardIds"].map { it.asLong() }).isEqualTo(rightDeck)
+    }
 }

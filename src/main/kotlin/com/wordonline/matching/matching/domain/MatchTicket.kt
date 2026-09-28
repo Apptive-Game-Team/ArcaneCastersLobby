@@ -42,6 +42,8 @@ data class MatchTicket(
      * reported", never "restarted".
      */
     val serverInstanceId: String? = null,
+    /** The immutable deck snapshot sent to the game server when this ticket is paired. */
+    val deckCardIds: List<Long>? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {

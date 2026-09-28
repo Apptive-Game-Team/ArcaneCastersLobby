@@ -35,6 +35,7 @@ class MatchTicketSerializationTest {
             attemptId = "attempt-1",
             serverId = 7L,
             serverInstanceId = "boot-1",
+            deckCardIds = listOf(1L, 1L, 2L, 2L, 3L, 3L, 4L, 4L, 5L, 5L, 6L, 6L, 7L, 7L, 8L),
             createdAt = Instant.parse("2026-08-10T00:00:00Z"),
             updatedAt = Instant.parse("2026-08-10T00:00:05Z"),
         )
@@ -49,6 +50,7 @@ class MatchTicketSerializationTest {
             .`as`("호스트 재시작 판별의 유일한 근거이므로 왕복에서 사라지면 안 된다")
             .isEqualTo("boot-1")
         assertThat(decoded.serverId).isEqualTo(7L)
+        assertThat(decoded.deckCardIds).isEqualTo(ticket.deckCardIds)
     }
 
     @Test
