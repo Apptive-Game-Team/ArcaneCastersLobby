@@ -57,7 +57,16 @@ class GameServerContractTest {
         assertThat(json.has("session")).isFalse()
         assertThat(json.has("sessionDto")).isFalse()
         assertThat(json.fieldNames().asSequence().toList())
-            .containsExactlyInAnyOrder("attemptId", "sessionId", "uid1", "uid2", "sessionType", "scenarioId")
+            .containsExactlyInAnyOrder(
+                "attemptId",
+                "sessionId",
+                "uid1",
+                "uid2",
+                "sessionType",
+                "scenarioId",
+                "leftDeckCardIds",
+                "rightDeckCardIds",
+            )
     }
 
     @Test

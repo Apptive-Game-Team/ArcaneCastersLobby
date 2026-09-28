@@ -3,6 +3,7 @@ package com.wordonline.matching.matching.service
 import com.wordonline.matching.auth.service.UserService
 import com.wordonline.matching.deck.service.DeckService
 import com.wordonline.matching.matching.dto.MatchedInfoDto
+import com.wordonline.matching.matching.dto.MatchDeckMode
 import com.wordonline.matching.matching.dto.SessionDto
 import com.wordonline.matching.matching.dto.SimpleMessageDto
 import com.wordonline.matching.matching.config.MatchTicketProperties
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import org.springframework.web.server.ResponseStatusException
 import java.time.Clock
 import java.time.Instant
 import java.util.UUID
@@ -34,6 +36,7 @@ class GameMatchService(
     private val legacyGameMatchService: LegacyGameMatchService,
     private val userService: UserService,
     private val deckService: DeckService,
+    private val randomDeckService: RandomDeckService,
     private val matchingQueueRepository: MatchingQueueRepository,
     private val matchTicketRepository: MatchTicketRepository,
     private val matchTicketProperties: MatchTicketProperties,
@@ -84,28 +87,45 @@ class GameMatchService(
     }
 
     suspend fun match(userId: Long): SimpleMessageDto {
-        if (enqueue(userId) == null) {
+        if (enqueue(userId, MatchDeckMode.SELECTED) == null) {
             return SimpleMessageDto("Failed to enqueue user")
         }
 
         return SimpleMessageDto("Successfully Enqueued")
     }
 
-    suspend fun createTicket(userId: Long): MatchTicket =
-        enqueue(userId) ?: throw IllegalStateException("Failed to enqueue user")
+    suspend fun createTicket(userId: Long, deckMode: MatchDeckMode): MatchTicket =
+        enqueue(userId, deckMode) ?: throw IllegalStateException("Failed to enqueue user")
 
-    private suspend fun enqueue(userId: Long): MatchTicket? {
+    private suspend fun enqueue(userId: Long, deckMode: MatchDeckMode): MatchTicket? {
         return try {
-            validateSelectedDeck(userId)
+            val deckCardIds = when (deckMode) {
+                MatchDeckMode.SELECTED -> {
+                    validateSelectedDeck(userId)
+                    null
+                }
+                MatchDeckMode.RANDOM -> randomDeckService.create(userId)
+            }
             val mmr = userService.getMmr(userId).awaitSingle()
             val now = Instant.now(clock)
             val ticket = matchTicketRepository.enqueue(
-                MatchTicket(UUID.randomUUID().toString(), userId, mmr, MatchTicketState.QUEUED, 1, createdAt = now, updatedAt = now),
+                MatchTicket(
+                    UUID.randomUUID().toString(),
+                    userId,
+                    mmr,
+                    MatchTicketState.QUEUED,
+                    1,
+                    deckCardIds = deckCardIds,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
             )
             applyUserStatus(ticket)
             log.info("User ticket enqueued: userId={}, mmr={}", userId, mmr)
             ticket
         } catch (e: CancellationException) {
+            throw e
+        } catch (e: ResponseStatusException) {
             throw e
         } catch (e: Exception) {
             log.warn("Failed to enqueue user for matching: userId={}", userId, e)
@@ -166,7 +186,13 @@ class GameMatchService(
             val uid1 = first.userId
             val uid2 = second.userId
             val sessionId = "session-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-            val sessionDto = SessionDto.from(sessionId, uid1, uid2)
+            val sessionDto = SessionDto.from(
+                sessionId,
+                uid1,
+                uid2,
+                first.deckCardIds,
+                second.deckCardIds,
+            )
 
             try {
                 val placement = legacyGameMatchService.createSession(sessionDto, attemptId)

@@ -10,6 +10,8 @@ data class CreateSessionRequest(
     val uid2: Long?,
     val sessionType: SessionType,
     val scenarioId: Long?,
+    val leftDeckCardIds: List<Long>?,
+    val rightDeckCardIds: List<Long>?,
 ) {
     constructor(attemptId: String, session: SessionDto) : this(
         attemptId,
@@ -18,6 +20,8 @@ data class CreateSessionRequest(
         session.uid2,
         session.sessionType,
         session.scenarioId,
+        session.leftDeckCardIds,
+        session.rightDeckCardIds,
     )
 }
 
