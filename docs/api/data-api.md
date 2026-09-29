@@ -77,7 +77,7 @@
       "name": "leafair",
       "element": "Nature",
       "manaCost": 10,
-      "castKind": "Shot",
+      "castKind": "Drop",
       "indicator": {
         "version": 1,
         "layers": [
@@ -95,7 +95,7 @@
       "name": "stone_spike",
       "element": "Rock",
       "manaCost": 12,
-      "castKind": "Drop",
+      "castKind": "Explosion",
       "indicator": {
         "version": 1,
         "layers": [
