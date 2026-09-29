@@ -17,14 +17,14 @@ public class UserAdventureRepository {
             SELECT
                 a.id AS adventure_id,
                 CASE
-                    WHEN COUNT(DISTINCT st.id) = COUNT(DISTINCT CASE WHEN us_agg.stage_finished THEN st.id END) THEN 'FINISHED'
-                    WHEN COUNT(DISTINCT CASE WHEN us_agg.stage_active OR us_agg.stage_finished THEN st.id END) > 0 THEN 'ACTIVE'
+                    WHEN adv_agg.all_finished THEN 'FINISHED'
+                    WHEN adv_agg.any_started THEN 'ACTIVE'
                     ELSE 'INACTIVE'
                 END AS adventure_state,
                 st.id AS stage_id,
                 CASE
-                    WHEN COUNT(sc.id) = COUNT(CASE WHEN usc.state = 'FINISHED' THEN sc.id END) THEN 'FINISHED'
-                    WHEN COUNT(CASE WHEN usc.state = 'ACTIVE' OR usc.state = 'FINISHED' THEN sc.id END) > 0 THEN 'ACTIVE'
+                    WHEN stage_agg.all_finished THEN 'FINISHED'
+                    WHEN stage_agg.any_started THEN 'ACTIVE'
                     ELSE 'INACTIVE'
                 END AS stage_state,
                 sc.id AS scenario_id,
@@ -33,15 +33,25 @@ public class UserAdventureRepository {
             JOIN stages st ON a.id = st.adventure_id
             JOIN scenarios sc ON st.id = sc.stage_id
             LEFT JOIN user_scenarios usc ON sc.id = usc.scenario_id AND usc.user_id = :userId
+            -- Stage and adventure state come from every scenario under them, one row per scenario.
+            -- A scenario the user has no row for counts as INACTIVE, so it keeps its stage unfinished.
             LEFT JOIN LATERAL (
                 SELECT
-                    bool_and(usc2.state = 'FINISHED') as stage_finished,
-                    bool_or(usc2.state = 'ACTIVE') as stage_active
+                    bool_and(COALESCE(usc2.state, 'INACTIVE') = 'FINISHED') AS all_finished,
+                    bool_or(COALESCE(usc2.state, 'INACTIVE') IN ('ACTIVE', 'FINISHED')) AS any_started
                 FROM scenarios sc2
                 LEFT JOIN user_scenarios usc2 ON sc2.id = usc2.scenario_id AND usc2.user_id = :userId
                 WHERE sc2.stage_id = st.id
-            ) us_agg ON TRUE
-            GROUP BY a.id, st.id, sc.id, usc.state
+            ) stage_agg ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT
+                    bool_and(COALESCE(usc3.state, 'INACTIVE') = 'FINISHED') AS all_finished,
+                    bool_or(COALESCE(usc3.state, 'INACTIVE') IN ('ACTIVE', 'FINISHED')) AS any_started
+                FROM stages st3
+                JOIN scenarios sc3 ON st3.id = sc3.stage_id
+                LEFT JOIN user_scenarios usc3 ON sc3.id = usc3.scenario_id AND usc3.user_id = :userId
+                WHERE st3.adventure_id = a.id
+            ) adv_agg ON TRUE
             ORDER BY a.id, st.id, sc.id
             """;
 
