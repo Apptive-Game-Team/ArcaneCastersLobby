@@ -77,6 +77,7 @@
       "name": "leafair",
       "element": "Nature",
       "manaCost": 10,
+      "castKind": "Shot",
       "indicator": {
         "version": 1,
         "layers": [
@@ -94,6 +95,7 @@
       "name": "stone_spike",
       "element": "Rock",
       "manaCost": 12,
+      "castKind": "Drop",
       "indicator": {
         "version": 1,
         "layers": [
@@ -116,6 +118,7 @@
     -   `element` (String): 마법의 원소. `Fire`, `Water`, `Lightning`, `Rock`, `Nature`, `Wind`, `None` 중 하나입니다.
     -   `manaCost` (Integer): 시전에 필요한 마나. `game_objects.name = magics.name`으로 이어진 `parameter_values`의 `mana_cost` 값입니다.
     -   `indicator` (Object, nullable): 조준 표시를 그리는 방법을 담은 문서. `magics.indicator` jsonb 컬럼 값을 그대로 내려주며, 로비 서버는 이 문서를 파싱하거나 검증하지 않고 그대로 전달만 합니다. 값이 없으면 `null`입니다. 구조는 아래 "Indicator 문서" 절을 참고하세요.
+    -   `castKind` (String): `magics.cast_kind` 값. 카드가 필드에 무엇을 남기는지를 말합니다. `Spawn`(유닛), `Summon`(건물), `Drop`, `Explosion`, `Shot` 중 하나이며, 예전 값 `Code`가 남아 있을 수 있습니다.
 -   **version** (String): 응답에 포함된 마법 중 가장 마지막에 업데이트된 시간 (ISO-8601 형식). `currentVersion` 파라미터가 제공되었지만 새로운 데이터가 없는 경우, 제공된 `currentVersion` 값이 그대로 반환될 수 있습니다.
 -   **requiresRefresh** (Boolean): 클라이언트가 전체 데이터를 다시 받아야 하는 경우 `true`, `currentVersion` 기준으로 변경이 없어 빈 응답을 반환하는 경우 `false`입니다.
 
