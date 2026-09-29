@@ -37,12 +37,15 @@ public class QuestRewardGiver {
 
         return fillParam(rewardGiver, quest.getId())
                 .then(Mono.defer(() -> rewardGiver.give(userId)))
-                .thenReturn(new QuestRewardDto(
+                // Built only after fillParam has run: a reward giver is a prototype bean whose
+                // params are null until then, so thenReturn(new ...) read a null reward id at
+                // assembly time and threw.
+                .then(Mono.fromCallable(() -> new QuestRewardDto(
                         rewardGiver.getRewardType(),
                         rewardGiver.getRewardId(),
                         rewardGiver.getAmount(),
                         quest.getId()
-                ));
+                )));
     }
 
     private RewardGiver findRewardGiver(Quest quest) {
