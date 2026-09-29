@@ -23,6 +23,12 @@ public record MagicDto(
          * string's content inline as a JSON object instead of an escaped string; a
          * {@code null} value still serializes as a real JSON {@code null}.
          */
-        @JsonRawValue String indicator
+        @JsonRawValue String indicator,
+        /**
+         * {@code magics.cast_kind}: what the card puts on the field - Spawn (unit), Summon
+         * (building), Drop, Explosion or Shot. The client filters cards by it and decides whether
+         * a cast snaps to a clicked unit.
+         */
+        String castKind
 ) {
 }

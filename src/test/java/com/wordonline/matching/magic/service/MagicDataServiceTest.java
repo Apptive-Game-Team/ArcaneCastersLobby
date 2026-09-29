@@ -52,8 +52,8 @@ class MagicDataServiceTest {
                 .thenReturn(Flux.just(
                         new MagicListRow(10L, "fireball", 15.0,
                                 "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}",
-                                "Fire,Lightning,Water"),
-                        new MagicListRow(20L, "ice_wall", 20.0, null, null)
+                                "Fire,Lightning,Water", "Spawn"),
+                        new MagicListRow(20L, "ice_wall", 20.0, null, null, "Summon")
                 ));
 
         StepVerifier.create(magicDataService.getMagics(currentVersion))
@@ -77,7 +77,7 @@ class MagicDataServiceTest {
                 .thenReturn(Mono.just(magic));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
                 .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0,
-                        "{\"version\":1,\"layers\":[]}", "Fire")));
+                        "{\"version\":1,\"layers\":[]}", "Fire", "Shot")));
 
         StepVerifier.create(magicDataService.getMagics(null))
                 .assertNext(response -> {
@@ -121,7 +121,7 @@ class MagicDataServiceTest {
         when(magicRepository.findLatestUpdated())
                 .thenReturn(Mono.just(hiddenMagic));
         when(magicQueryRepository.findAllWithManaCostAndIndicator())
-                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0, null, "Fire")));
+                .thenReturn(Flux.just(new MagicListRow(10L, "fireball", 15.0, null, "Fire", "Shot")));
 
         StepVerifier.create(magicDataService.getMagics(currentVersion))
                 .assertNext(response -> {
@@ -141,12 +141,14 @@ class MagicDataServiceTest {
                         && magic.elements().equals(List.of("Fire", "Lightning", "Water"))
                         && magic.manaCost().equals(15)
                         && magic.indicator().equals(
-                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}"));
+                                "{\"version\":1,\"layers\":[{\"shape\":\"circle\",\"radius\":{\"parameter\":\"radius\"}}]}")
+                        && magic.castKind().equals("Spawn"));
         assert response.magics().stream().anyMatch(magic ->
                 magic.id().equals(20L)
                         && magic.name().equals("ice_wall")
                         && magic.elements().equals(List.of("Water"))
                         && magic.manaCost().equals(20)
-                        && magic.indicator() == null);
+                        && magic.indicator() == null
+                        && magic.castKind().equals("Summon"));
     }
 }
