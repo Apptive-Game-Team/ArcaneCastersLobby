@@ -43,7 +43,7 @@ class CardControllerTest {
         // 컨트롤러가 그 결과를 더하거나 빼지 않고 그대로 내려주는지만 본다. LEGACY 로 은퇴한
         // 마법(예: water_shot)은 이 목록에 없어야 영구히 잠긴 줄로 남지 않는다.
         CardListResponse mockResponse = new CardListResponse(List.of(
-                new CardListItem(1L, "fireball", "Fire", 3, 2, true, null, null)
+                new CardListItem(1L, "fireball", "Fire", 3, 2, true, null, null, "Shot")
         ));
 
         when(cardListService.getMyCards(userId)).thenReturn(Mono.just(mockResponse));

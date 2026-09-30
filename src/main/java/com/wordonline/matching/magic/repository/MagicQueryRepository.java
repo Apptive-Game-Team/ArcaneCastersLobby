@@ -14,7 +14,8 @@ select
   m.name as "name",
   mana.value as "mana_cost",
   m.indicator::text as "indicator",
-  pe.elements as "elements"
+  pe.elements as "elements",
+  m.cast_kind as "cast_kind"
 from magics m
 left join game_objects go on go.name = m.name
 left join parameters mp on mp.name = 'mana_cost'

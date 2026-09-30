@@ -29,7 +29,8 @@ select
     when um.magic_id is null and m.unlock_condition_type = 'WIN_COUNT'
       then (least(u.total_wins, m.unlock_required_value)::text || '/' || m.unlock_required_value::text)
     else null
-  end as "progress_text"
+  end as "progress_text",
+  m.cast_kind as "cast_kind"
 from magics m
 join users u on u.id = :userId
 left join user_magics um
