@@ -103,6 +103,18 @@ class UserServiceAppearanceTest {
     }
 
     @Test
+    void ownProfileDtoCarriesMmr() {
+        User user = new User(5L, UserStatus.Online, null, 0, 1234L, null, null);
+
+        org.junit.jupiter.api.Assertions.assertEquals(1234, new UserResponseDto(user).mmr());
+    }
+
+    @Test
+    void ownProfileDtoSendsZeroMmrWhenColumnIsNull() {
+        org.junit.jupiter.api.Assertions.assertEquals(0, new UserResponseDto(userWithAppearance(5L, null)).mmr());
+    }
+
+    @Test
     void ownProfileDtoKeepsNullAppearance() {
         UserResponseDto dto = new UserResponseDto(userWithAppearance(5L, null));
 
