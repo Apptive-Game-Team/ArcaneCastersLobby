@@ -177,8 +177,8 @@ class QuestPostgresIntegrationTest {
         val results = (1..callers).map { async(Dispatchers.IO) { questService.checkQuestsWithRewards(userId) } }.awaitAll()
 
         assertThat(results.flatten()).containsExactly(
-            QuestRewardDto("MAGIC", 100L, 2, 1L),
-            QuestRewardDto("DECORATION", 200L, 1, 1L),
+            QuestRewardDto("MAGIC", 100L, null, 2, 1L),
+            QuestRewardDto("DECORATION", 200L, null, 1, 1L),
         )
         assertThat(arrived.get()).isEqualTo(callers)
         assertThat(queryLong("SELECT count FROM user_magics WHERE user_id = 1 AND magic_id = 100")).isEqualTo(5L)
@@ -196,7 +196,7 @@ class QuestPostgresIntegrationTest {
 
         val rewards = service().checkQuestsWithRewards(userId)
 
-        assertThat(rewards).containsExactly(QuestRewardDto("DECORATION", 200L, 1, 2L))
+        assertThat(rewards).containsExactly(QuestRewardDto("DECORATION", 200L, null, 1, 2L))
         assertThat(queryString("SELECT state FROM user_quests WHERE user_id = 1 AND quest_id = 1")).isEqualTo("IN_PROGRESS")
         assertThat(queryString("SELECT state FROM user_quests WHERE user_id = 1 AND quest_id = 2")).isEqualTo("COMPLETED")
         assertThat(queryLong("SELECT COUNT(*) FROM user_magics WHERE user_id = 1")).isEqualTo(0L)
@@ -204,8 +204,8 @@ class QuestPostgresIntegrationTest {
         // Fix the data; the next check grants quest 1 exactly once.
         exec("UPDATE quest_rewards SET target_id = 101 WHERE id = 11")
         assertThat(service().checkQuestsWithRewards(userId)).containsExactly(
-            QuestRewardDto("MAGIC", 100L, 2, 1L),
-            QuestRewardDto("MAGIC", 101L, 1, 1L),
+            QuestRewardDto("MAGIC", 100L, null, 2, 1L),
+            QuestRewardDto("MAGIC", 101L, null, 1, 1L),
         )
         assertThat(service().checkQuestsWithRewards(userId)).isEmpty()
         assertThat(queryLong("SELECT count FROM user_magics WHERE user_id = 1 AND magic_id = 100")).isEqualTo(2L)
@@ -258,7 +258,7 @@ class QuestPostgresIntegrationTest {
         assertThat(service().findMyQuests(userId).single().progress).isEqualTo(1)
 
         exec("UPDATE user_scenarios SET state = 'FINISHED' WHERE scenario_id = 510")
-        assertThat(service().checkQuestsWithRewards(userId)).containsExactly(QuestRewardDto("MAGIC", 100L, 1, 1L))
+        assertThat(service().checkQuestsWithRewards(userId)).containsExactly(QuestRewardDto("MAGIC", 100L, null, 1, 1L))
         assertThat(service().findMyQuests(userId).single().state).isEqualTo(QuestState.COMPLETED)
     }
 
@@ -269,7 +269,7 @@ class QuestPostgresIntegrationTest {
         exec("INSERT INTO quests(id, require_value, access_type, condition_type) VALUES (1, 0, 'DEFAULT', 'ADVENTURE_CLEAR'), (2, 1, 'DEFAULT', 'TOTAL_WIN')")
         exec("INSERT INTO quest_rewards(quest_id, reward_type, target_id, amount) VALUES (1, 'MAGIC', 100, 1), (2, 'MAGIC', 101, 1)")
 
-        assertThat(service().checkQuestsWithRewards(userId)).containsExactly(QuestRewardDto("MAGIC", 101L, 1, 2L))
+        assertThat(service().checkQuestsWithRewards(userId)).containsExactly(QuestRewardDto("MAGIC", 101L, null, 1, 2L))
         assertThat(queryString("SELECT state FROM user_quests WHERE user_id = 1 AND quest_id = 1")).isEqualTo("IN_PROGRESS")
     }
 

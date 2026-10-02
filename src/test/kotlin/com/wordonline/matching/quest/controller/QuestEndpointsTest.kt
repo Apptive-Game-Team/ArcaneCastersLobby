@@ -78,11 +78,15 @@ class QuestEndpointsTest {
     }
 
     @Test
-    @DisplayName("퀘스트_check_응답_모양은_rewards_배열_그대로다")
+    @DisplayName("퀘스트_check_응답은_rewards_배열이고_보상마다_rewardKey_가_있다")
     fun checkMyQuests_Shape() {
         runBlocking {
             whenever(questService.checkQuestsWithRewards(userId)).thenReturn(
-                listOf(QuestRewardDto("MAGIC", 10L, 3, 1L), QuestRewardDto("DECORATION", 20L, 1, 2L)),
+                listOf(
+                    QuestRewardDto("MAGIC", 10L, null, 3, 1L),
+                    QuestRewardDto("DECORATION", 20L, null, 1, 2L),
+                    QuestRewardDto("CHEST", 1L, "forest_chest", 1, 11L),
+                ),
             )
         }
 
@@ -93,8 +97,9 @@ class QuestEndpointsTest {
             .json(
                 """
                 {"rewards":[
-                  {"rewardType":"MAGIC","rewardId":10,"amount":3,"questId":1},
-                  {"rewardType":"DECORATION","rewardId":20,"amount":1,"questId":2}
+                  {"rewardType":"MAGIC","rewardId":10,"rewardKey":null,"amount":3,"questId":1},
+                  {"rewardType":"DECORATION","rewardId":20,"rewardKey":null,"amount":1,"questId":2},
+                  {"rewardType":"CHEST","rewardId":1,"rewardKey":"forest_chest","amount":1,"questId":11}
                 ]}
                 """,
                 true,
@@ -114,7 +119,10 @@ class QuestEndpointsTest {
                         state = QuestState.IN_PROGRESS,
                         progress = 2,
                         requireValue = 3,
-                        rewards = listOf(QuestSummaryRewardDto("MAGIC", 83L, 2)),
+                        rewards = listOf(
+                            QuestSummaryRewardDto("MAGIC", 83L, null, 2),
+                            QuestSummaryRewardDto("APPEARANCE", 6L, "grass", 1),
+                        ),
                     ),
                     QuestSummaryResponseDto(
                         questId = 2L,
@@ -137,7 +145,8 @@ class QuestEndpointsTest {
                 """
                 [
                   {"questId":1,"conditionType":"STAGE_CLEAR","conditionTargetId":null,"state":"IN_PROGRESS",
-                   "progress":2,"requireValue":3,"rewards":[{"rewardType":"MAGIC","rewardId":83,"amount":2}]},
+                   "progress":2,"requireValue":3,"rewards":[{"rewardType":"MAGIC","rewardId":83,"rewardKey":null,"amount":2},
+                              {"rewardType":"APPEARANCE","rewardId":6,"rewardKey":"grass","amount":1}]},
                   {"questId":2,"conditionType":"TOTAL_WIN","conditionTargetId":7,"state":"PENDING",
                    "progress":0,"requireValue":10,"rewards":[]}
                 ]

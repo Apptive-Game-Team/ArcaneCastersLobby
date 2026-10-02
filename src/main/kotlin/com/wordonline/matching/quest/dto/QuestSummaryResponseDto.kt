@@ -18,9 +18,13 @@ data class QuestSummaryResponseDto(
     val rewards: List<QuestSummaryRewardDto>,
 )
 
-/** One reward of a listed quest. [rewardId] is `quest_rewards.target_id`, 0 when it is null. */
+/**
+ * One reward of a listed quest. [rewardId] is `quest_rewards.target_id`, 0 when it is null, and
+ * [rewardKey] the string key the client shows it by, as in [QuestRewardDto].
+ */
 data class QuestSummaryRewardDto(
     val rewardType: String,
     val rewardId: Long,
+    val rewardKey: String?,
     val amount: Int,
 )

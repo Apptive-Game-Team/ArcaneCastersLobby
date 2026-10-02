@@ -1,7 +1,6 @@
 package com.wordonline.matching.quest.reward
 
 import com.wordonline.matching.decoration.repository.UserDecorationRepository
-import com.wordonline.matching.quest.entity.QuestReward
 import kotlinx.coroutines.reactor.awaitSingle
 import org.springframework.stereotype.Component
 
@@ -16,10 +15,13 @@ class DecorationRewardGrantor(
 
     override val type: String = TYPE
 
-    override suspend fun grant(userId: Long, reward: QuestReward) {
+    override suspend fun grant(userId: Long, reward: Reward) {
         val decorationId = requireTargetId(reward)
         userDecorationRepository.insertIfAbsent(userId, decorationId).awaitSingle()
     }
+
+    /** A decoration is shown by its id; there is no string key. */
+    override suspend fun describe(targetId: Long?): String? = null
 
     companion object {
         const val TYPE = "DECORATION"

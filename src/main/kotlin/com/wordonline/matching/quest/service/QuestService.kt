@@ -90,8 +90,15 @@ class QuestService(
             when (val claimed = userQuestRepository.claim(userId, quest.id).awaitSingle()) {
                 0L -> emptyList()
                 1L -> rewards.map { reward ->
-                    questRegistry.grantor(reward.rewardType).grant(userId, reward)
-                    QuestRewardDto(reward.rewardType, reward.targetId ?: 0L, reward.amount, quest.id)
+                    val grantor = questRegistry.grantor(reward.rewardType)
+                    grantor.grant(userId, reward)
+                    QuestRewardDto(
+                        rewardType = reward.rewardType,
+                        rewardId = reward.targetId ?: 0L,
+                        rewardKey = grantor.describe(reward.targetId),
+                        amount = reward.amount,
+                        questId = quest.id,
+                    )
                 }
                 // Only possible without the unique (user_id, quest_id) constraint. Throwing rolls
                 // the claim back rather than marking duplicate rows completed with nothing granted.
@@ -136,6 +143,8 @@ class QuestService(
             Triple(quests.await(), rewards.await(), states.await())
         }
 
+        val rewardKeys = questRegistry.describeRewards(rewardsByQuestId.values.flatten())
+
         return quests.sortedBy(Quest::id).map { quest ->
             val progress = measureProgress(userId, quest) ?: 0
             QuestSummaryResponseDto(
@@ -146,7 +155,12 @@ class QuestService(
                 progress = progress,
                 requireValue = quest.requireValue,
                 rewards = rewardsByQuestId[quest.id].orEmpty().map { reward ->
-                    QuestSummaryRewardDto(reward.rewardType, reward.targetId ?: 0L, reward.amount)
+                    QuestSummaryRewardDto(
+                        rewardType = reward.rewardType,
+                        rewardId = reward.targetId ?: 0L,
+                        rewardKey = rewardKeys.keyOf(reward),
+                        amount = reward.amount,
+                    )
                 },
             )
         }

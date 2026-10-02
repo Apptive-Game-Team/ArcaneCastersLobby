@@ -1,9 +1,13 @@
 package com.wordonline.matching.quest.service
 
+import com.wordonline.matching.chest.entity.ChestReward
+import com.wordonline.matching.chest.repository.ChestRepository
 import com.wordonline.matching.quest.entity.Quest
 import com.wordonline.matching.quest.entity.QuestReward
 import com.wordonline.matching.quest.repository.QuestRepository
 import com.wordonline.matching.quest.repository.QuestRewardRepository
+import com.wordonline.matching.quest.reward.Reward
+import com.wordonline.matching.quest.reward.RewardGrantor
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
@@ -52,12 +56,17 @@ class QuestRegistryTest {
         assertThat(registry.findCondition("NOPE")).isNull()
     }
 
-    private fun startupCheck(quests: List<Quest>, rewards: List<QuestReward>): QuestRegistryStartupCheck {
+    private fun startupCheck(
+        quests: List<Quest>,
+        rewards: List<QuestReward>,
+        chestRewards: List<ChestReward> = emptyList(),
+    ): QuestRegistryStartupCheck {
         val questRepository = mock<QuestRepository> { on { findAllActive() } doReturn Flux.fromIterable(quests) }
         val questRewardRepository = mock<QuestRewardRepository> {
             on { findAllOfActiveQuests() } doReturn Flux.fromIterable(rewards)
         }
-        return QuestRegistryStartupCheck(questRepository, questRewardRepository, registry)
+        val chestRepository = mock<ChestRepository> { onBlocking { findAllRewards() } doReturn chestRewards }
+        return QuestRegistryStartupCheck(questRepository, questRewardRepository, chestRepository, registry)
     }
 
     @Test
@@ -87,11 +96,75 @@ class QuestRegistryTest {
     }
 
     @Test
+    @DisplayName("시작_검사는_chest_rewards_에_등록되지_않은_reward_type_이_있으면_실패한다")
+    fun startupCheckFailsOnUnknownChestRewardType() {
+        val check = startupCheck(
+            listOf(Quest(1L, 1, "DEFAULT", "STAGE_CLEAR")),
+            listOf(QuestReward(10L, 1L, "MAGIC", 3L, 1)),
+            listOf(ChestReward(30L, 2L, "MAGIC", 3L, 1), ChestReward(31L, 2L, "GOLD", null, 100)),
+        )
+
+        assertThatThrownBy { runBlocking { check.verify() } }
+            .isInstanceOf(UnknownQuestTypeException::class.java)
+            .hasMessageContaining("chest_rewards 31 of chest 2 has reward_type 'GOLD'")
+    }
+
+    @Test
+    @DisplayName("시작_검사는_chest_rewards_에_CHEST_가_있으면_등록되어_있어도_실패한다")
+    fun startupCheckFailsOnChestInsideChest() {
+        val registryWithChest = QuestRegistry(
+            listOf(FixedProgressCondition("STAGE_CLEAR")),
+            listOf(RecordingGrantor("MAGIC"), RecordingGrantor("CHEST")),
+        )
+        val chestRepository = mock<ChestRepository> {
+            onBlocking { findAllRewards() } doReturn listOf(ChestReward(40L, 3L, "CHEST", 1L, 1))
+        }
+        val check = QuestRegistryStartupCheck(
+            mock { on { findAllActive() } doReturn Flux.empty() },
+            mock { on { findAllOfActiveQuests() } doReturn Flux.empty() },
+            chestRepository,
+            registryWithChest,
+        )
+
+        assertThatThrownBy { runBlocking { check.verify() } }
+            .isInstanceOf(UnknownQuestTypeException::class.java)
+            .hasMessageContaining("chest_rewards 40 of chest 3 has reward_type 'CHEST'")
+            .hasMessageContaining("a chest cannot contain a chest")
+    }
+
+    @Test
+    @DisplayName("describeRewards 는_같은_type_과_target_을_한_번만_묻고_grantor_가_없는_type_은_null_이다")
+    fun describeRewardsDeduplicatesAndToleratesUnknownTypes() = runTest {
+        val described = mutableListOf<Long?>()
+        val appearanceGrantor = object : RewardGrantor {
+            override val type = "APPEARANCE"
+            override suspend fun grant(userId: Long, reward: Reward) = Unit
+            override suspend fun describe(targetId: Long?): String? {
+                described += targetId
+                return "appearance$targetId"
+            }
+        }
+        val describingRegistry = QuestRegistry(listOf(FixedProgressCondition("STAGE_CLEAR")), listOf(appearanceGrantor))
+        val rewards = listOf(
+            ChestReward(1L, 1L, "APPEARANCE", 6L, 1),
+            ChestReward(2L, 2L, "APPEARANCE", 6L, 1),
+            ChestReward(3L, 2L, "APPEARANCE", 5L, 1),
+            ChestReward(4L, 2L, "GOLD", null, 10),
+        )
+
+        val keys = describingRegistry.describeRewards(rewards)
+
+        assertThat(described).containsExactly(6L, 5L)
+        assertThat(rewards.map { keys.keyOf(it) }).containsExactly("appearance6", "appearance6", "appearance5", null)
+    }
+
+    @Test
     @DisplayName("시작_검사는_모든_type_이_등록되어_있으면_통과한다")
     fun startupCheckPassesWhenAllRegistered() = runTest {
         startupCheck(
             listOf(Quest(1L, 1, "DEFAULT", "STAGE_CLEAR"), Quest(2L, 3, "DEFAULT", "TOTAL_WIN")),
             listOf(QuestReward(10L, 1L, "MAGIC", 3L, 1), QuestReward(11L, 2L, "DECORATION", 4L, 1)),
+            listOf(ChestReward(30L, 1L, "DECORATION", 4L, 1)),
         ).verify()
     }
 }

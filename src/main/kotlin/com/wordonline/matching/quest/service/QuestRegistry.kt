@@ -1,6 +1,7 @@
 package com.wordonline.matching.quest.service
 
 import com.wordonline.matching.quest.condition.QuestCondition
+import com.wordonline.matching.quest.reward.Reward
 import com.wordonline.matching.quest.reward.RewardGrantor
 import org.springframework.stereotype.Component
 
@@ -35,6 +36,16 @@ class QuestRegistry(
     fun grantor(type: String): RewardGrantor =
         findGrantor(type) ?: throw UnknownQuestTypeException("no RewardGrantor is registered for reward_type '$type'")
 
+    /**
+     * The `rewardKey` of every distinct (`reward_type`, `target_id`) pair in [rewards], through each
+     * type's [RewardGrantor.describe]. A pair is described once however many rows share it, so a
+     * list of many chests holding the same reward costs one lookup. A type with no registered
+     * grantor (a row added after the startup check) describes as null rather than failing a read.
+     */
+    suspend fun describeRewards(rewards: Collection<Reward>): Map<RewardTarget, String?> =
+        rewards.map { RewardTarget(it.rewardType, it.targetId) }.distinct()
+            .associateWith { target -> findGrantor(target.rewardType)?.describe(target.targetId) }
+
     private fun <T : Any> indexByType(beans: List<T>, kind: String, typeOf: (T) -> String): Map<String, T> {
         val duplicates = beans.groupBy(typeOf).filterValues { it.size > 1 }
         check(duplicates.isEmpty()) {
@@ -46,6 +57,12 @@ class QuestRegistry(
         return beans.associateBy(typeOf)
     }
 }
+
+/** The part of a reward row its `rewardKey` depends on. */
+data class RewardTarget(val rewardType: String, val targetId: Long?)
+
+/** The key [QuestRegistry.describeRewards] gives [reward], or null. */
+fun Map<RewardTarget, String?>.keyOf(reward: Reward): String? = this[RewardTarget(reward.rewardType, reward.targetId)]
 
 /** A `condition_type` or `reward_type` with no registered implementation. */
 class UnknownQuestTypeException(message: String) : IllegalStateException(message)

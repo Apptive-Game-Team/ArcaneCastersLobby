@@ -11,6 +11,7 @@ import com.wordonline.matching.quest.entity.UserQuest
 import com.wordonline.matching.quest.repository.QuestRepository
 import com.wordonline.matching.quest.repository.QuestRewardRepository
 import com.wordonline.matching.quest.repository.UserQuestRepository
+import com.wordonline.matching.quest.reward.Reward
 import com.wordonline.matching.quest.reward.RewardGrantor
 import com.wordonline.matching.quest.reward.RewardNotGrantableException
 import kotlinx.coroutines.async
@@ -162,8 +163,8 @@ class QuestServiceTest {
         val rewards = questService.checkQuestsWithRewards(userId)
 
         assertThat(rewards).containsExactly(
-            QuestRewardDto("MAGIC", 10L, 3, 1L),
-            QuestRewardDto("DECORATION", 20L, 1, 2L),
+            QuestRewardDto("MAGIC", 10L, null, 3, 1L),
+            QuestRewardDto("DECORATION", 20L, null, 1, 2L),
         )
         verify(userQuestRepository).insertMissing(userId)
         verify(userQuestRepository, never()).claim(userId, 3L)
@@ -187,12 +188,38 @@ class QuestServiceTest {
         val rewards = questService.checkQuestsWithRewards(userId)
 
         assertThat(rewards).containsExactly(
-            QuestRewardDto("MAGIC", 5L, 2, 1L),
-            QuestRewardDto("MAGIC", 6L, 1, 1L),
-            QuestRewardDto("DECORATION", 7L, 1, 1L),
+            QuestRewardDto("MAGIC", 5L, null, 2, 1L),
+            QuestRewardDto("MAGIC", 6L, null, 1, 1L),
+            QuestRewardDto("DECORATION", 7L, null, 1, 1L),
         )
-        assertThat(magicGrantor.granted.map { it.id }).containsExactly(10L, 11L)
-        assertThat(decorationGrantor.granted.map { it.id }).containsExactly(12L)
+        assertThat(magicGrantor.granted.map { (it as QuestReward).id }).containsExactly(10L, 11L)
+        assertThat(decorationGrantor.granted.map { (it as QuestReward).id }).containsExactly(12L)
+    }
+
+    @Test
+    @DisplayName("check_와_목록의_보상은_grantor_의_describe_값을_rewardKey_로_싣는다")
+    fun rewardKeyComesFromGrantorDescribe() = runTest {
+        decorationGrantor.keyPrefix = "decoration-"
+        whenever(questRepository.findClaimable(userId)).thenReturn(Flux.just(quest(1L, requireValue = 1)))
+        condition.progressByQuest[1L] = 1
+        whenever(questRewardRepository.findAllByQuestIds(listOf(1L)))
+            .thenReturn(Flux.just(reward(10L, 1L, "MAGIC", 5L), reward(11L, 1L, "DECORATION", 7L)))
+        whenever(userQuestRepository.claim(userId, 1L)).thenReturn(Mono.just(1L))
+
+        assertThat(questService.checkQuestsWithRewards(userId)).containsExactly(
+            QuestRewardDto("MAGIC", 5L, null, 1, 1L),
+            QuestRewardDto("DECORATION", 7L, "decoration-7", 1, 1L),
+        )
+
+        whenever(questRepository.findAllActive()).thenReturn(Flux.just(quest(1L, requireValue = 1)))
+        whenever(questRewardRepository.findAllOfActiveQuests())
+            .thenReturn(Flux.just(reward(10L, 1L, "MAGIC", 5L), reward(11L, 1L, "DECORATION", 7L)))
+        whenever(userQuestRepository.findAllByUserId(userId)).thenReturn(Flux.empty())
+
+        assertThat(questService.findMyQuests(userId).single().rewards).containsExactly(
+            QuestSummaryRewardDto("MAGIC", 5L, null, 1),
+            QuestSummaryRewardDto("DECORATION", 7L, "decoration-7", 1),
+        )
     }
 
     @Test
@@ -212,7 +239,7 @@ class QuestServiceTest {
             async { questService.checkQuestsWithRewards(userId) },
         ).awaitAll()
 
-        assertThat(results.flatten()).containsExactly(QuestRewardDto("MAGIC", 5L, 1, 1L))
+        assertThat(results.flatten()).containsExactly(QuestRewardDto("MAGIC", 5L, null, 1, 1L))
         assertThat(magicGrantor.granted).hasSize(1)
         assertThat(condition.calls).isEqualTo(2)
     }
@@ -235,7 +262,7 @@ class QuestServiceTest {
 
         val rewards = questService.checkQuestsWithRewards(userId)
 
-        assertThat(rewards).containsExactly(QuestRewardDto("DECORATION", 9L, 1, 2L))
+        assertThat(rewards).containsExactly(QuestRewardDto("DECORATION", 9L, null, 1, 2L))
         verify(userQuestRepository).claim(userId, 1L)
         assertThat(transactionalOperator.rollbacks).isEqualTo(1)
         assertThat(transactionalOperator.commits).isEqualTo(1)
@@ -294,14 +321,14 @@ class QuestServiceTest {
         assertThat(first.state).isEqualTo(QuestState.PENDING)
         assertThat(first.progress).isZero()
         assertThat(first.requireValue).isEqualTo(10)
-        assertThat(first.rewards).containsExactly(QuestSummaryRewardDto("MAGIC", 8L, 2))
+        assertThat(first.rewards).containsExactly(QuestSummaryRewardDto("MAGIC", 8L, null, 2))
         val second = quests[1]
         assertThat(second.conditionTargetId).isEqualTo(41L)
         assertThat(second.state).isEqualTo(QuestState.COMPLETED)
         assertThat(second.progress).isEqualTo(3)
         assertThat(second.rewards).containsExactly(
-            QuestSummaryRewardDto("DECORATION", 0L, 1),
-            QuestSummaryRewardDto("MAGIC", 9L, 1),
+            QuestSummaryRewardDto("DECORATION", 0L, null, 1),
+            QuestSummaryRewardDto("MAGIC", 9L, null, 1),
         )
 
         verify(userQuestRepository, never()).insertMissing(any())
@@ -342,15 +369,20 @@ class FixedProgressCondition(override val type: String) : QuestCondition {
 
 /** Records what it granted; with [failOnNullTarget] it throws on a null target like the real grantors. */
 class RecordingGrantor(override val type: String) : RewardGrantor {
-    val granted = mutableListOf<QuestReward>()
+    val granted = mutableListOf<Reward>()
     var failOnNullTarget = false
 
-    override suspend fun grant(userId: Long, reward: QuestReward) {
+    /** When set, [describe] answers "<prefix><targetId>"; otherwise null like MAGIC and DECORATION. */
+    var keyPrefix: String? = null
+
+    override suspend fun grant(userId: Long, reward: Reward) {
         if (failOnNullTarget && reward.targetId == null) {
             throw RewardNotGrantableException(reward, "target_id is null")
         }
         granted += reward
     }
+
+    override suspend fun describe(targetId: Long?): String? = keyPrefix?.let { "$it$targetId" }
 }
 
 /**

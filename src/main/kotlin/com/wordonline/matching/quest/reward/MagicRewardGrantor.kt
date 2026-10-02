@@ -1,7 +1,6 @@
 package com.wordonline.matching.quest.reward
 
 import com.wordonline.matching.deck.repository.UserCardRepository
-import com.wordonline.matching.quest.entity.QuestReward
 import kotlinx.coroutines.reactor.awaitSingle
 import org.springframework.stereotype.Component
 
@@ -20,13 +19,16 @@ class MagicRewardGrantor(
 
     override val type: String = TYPE
 
-    override suspend fun grant(userId: Long, reward: QuestReward) {
+    override suspend fun grant(userId: Long, reward: Reward) {
         val magicId = requireTargetId(reward)
         val changed = userCardRepository.addCount(userId, magicId, reward.amount).awaitSingle()
         if (changed != 1L) {
             throw RewardNotGrantableException(reward, "user_magics changed $changed rows, expected 1")
         }
     }
+
+    /** A magic is shown by its id; there is no string key. */
+    override suspend fun describe(targetId: Long?): String? = null
 
     companion object {
         const val TYPE = "MAGIC"
