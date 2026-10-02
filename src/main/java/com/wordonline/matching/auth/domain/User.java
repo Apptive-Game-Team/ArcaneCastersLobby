@@ -24,8 +24,12 @@ public class User {
     // insert and raised by the game server on each win against the tutorial opponent. Read here so
     // the lobby can route their practice match.
     private Float noviceProgress;
+    // Player look, from users.appearance. The database fills 'default' for a new row, and the value
+    // is the directory name under the client's Resources/PlayerAppearances/. It is passed to the
+    // client as stored; unknown values are not rejected here, and a null is tolerated.
+    private String appearance;
 
     public User(long memberId) {
-        this(memberId, UserStatus.Online, null, 0, null, null);
+        this(memberId, UserStatus.Online, null, 0, null, null, null);
     }
 }

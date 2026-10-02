@@ -1,5 +1,7 @@
 package com.wordonline.matching.auth.service;
 
+import java.util.Optional;
+
 import org.springframework.context.i18n.LocaleContext;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.stereotype.Service;
@@ -51,10 +53,20 @@ public class UserService {
 
     public Mono<UserDetailResponseDto> getUserDetail(Long memberId) {
         return accountClient.getMember(memberId)
-                .map(accountMemberResponseDto -> {
+                .flatMap(accountMemberResponseDto -> {
                     log.info(accountMemberResponseDto.toString());
-                    return new UserDetailResponseDto(memberId, accountMemberResponseDto);
+                    return findAppearance(memberId)
+                            .map(appearance -> new UserDetailResponseDto(
+                                    memberId, accountMemberResponseDto, appearance.orElse(null)));
                 });
+    }
+
+    // Humans and bots both read the look from their own users row. A missing row or a null column
+    // gives an empty Optional, which the dto sends as null.
+    private Mono<Optional<String>> findAppearance(long memberId) {
+        return userRepository.findById(memberId)
+                .map(user -> Optional.ofNullable(user.getAppearance()))
+                .defaultIfEmpty(Optional.empty());
     }
 
     public Mono<Void> deleteUser(long userId) {
