@@ -8,6 +8,7 @@ import com.wordonline.matching.auth.service.UserService
 import com.wordonline.matching.auth.service.UserStatisticsService
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.quest.dto.QuestCheckResponseDto
+import com.wordonline.matching.quest.dto.QuestSummaryResponseDto
 import com.wordonline.matching.quest.service.QuestService
 import com.wordonline.matching.session.service.LegacyGameMatchService
 import kotlinx.coroutines.reactor.awaitSingle
@@ -62,7 +63,11 @@ class UserController(
     suspend fun getMatchInfo(@UserId userId: Long?): MatchedInfoDto =
         gameMatchService.getMatchInfo(userId!!)
 
+    @GetMapping("/mine/quests")
+    suspend fun getMyQuests(@UserId userId: Long?): List<QuestSummaryResponseDto> =
+        questService.findMyQuests(userId!!)
+
     @PostMapping("/mine/quests/check")
     suspend fun checkMyQuests(@UserId userId: Long?): QuestCheckResponseDto =
-        QuestCheckResponseDto(questService.checkQuestsWithRewards(userId!!).awaitSingle())
+        QuestCheckResponseDto(questService.checkQuestsWithRewards(userId!!))
 }

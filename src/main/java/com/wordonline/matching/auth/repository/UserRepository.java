@@ -55,18 +55,6 @@ WHERE id = :userId;
 
     @Query(
             """
-            INSERT INTO user_quests(user_id, quest_id, state)
-            (
-                SELECT :userId, q.id, 'IN_PROGRESS'
-                FROM quests q
-                WHERE q.access_type = 'DEFAULT'
-            );
-            """
-    )
-    Mono<Void> initUserQuest(@Param("userId") Long userId);
-
-    @Query(
-            """
             WITH inserted_decks AS (
                INSERT INTO decks(name, user_id)
                (

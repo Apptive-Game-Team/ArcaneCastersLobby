@@ -44,7 +44,7 @@ class UserServiceAppearanceTest {
     @BeforeEach
     void setUp() {
         userService = new UserService(userRepository, accountClient, localizationService,
-                matchingQueueRepository, sessionRecoveryStore, gameSessionService);
+                matchingQueueRepository, sessionRecoveryStore, gameSessionService, null);
     }
 
     private User userWithAppearance(long id, String appearance) {

@@ -41,4 +41,15 @@ WHERE user_id = :memberId AND decoration_id = :decorationId
             @Param("memberId") long memberId,
             @Param("decorationId") long decorationId
     );
+
+    // user_decorations has no unique constraint, so the NOT EXISTS keeps a second grant from adding a duplicate row.
+    @Modifying
+    @Query("""
+INSERT INTO user_decorations(user_id, decoration_id, is_equipped)
+SELECT :memberId, :decorationId, FALSE
+WHERE NOT EXISTS (
+    SELECT 1 FROM user_decorations WHERE user_id = :memberId AND decoration_id = :decorationId
+)
+""")
+    Mono<Long> insertIfAbsent(@Param("memberId") long memberId, @Param("decorationId") long decorationId);
 }
