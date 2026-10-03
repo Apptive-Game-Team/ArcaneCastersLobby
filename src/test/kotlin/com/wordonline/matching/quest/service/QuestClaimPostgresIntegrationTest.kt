@@ -2,6 +2,8 @@ package com.wordonline.matching.quest.service
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.wordonline.matching.appearance.repository.AppearanceRepository
+import com.wordonline.matching.appearance.service.AppearanceSelection
+import com.wordonline.matching.appearance.service.AppearanceService
 import com.wordonline.matching.chest.dto.ChestRewardDto
 import com.wordonline.matching.chest.repository.ChestRepository
 import com.wordonline.matching.chest.service.ChestOpenResult
@@ -57,8 +59,8 @@ import reactor.core.publisher.Mono
 /**
  * Runs `claim_mode` and the explicit quest claim against a real Postgres built from the
  * WordOnlineDatabase migrations through V024, which adds `quests.claim_mode`, sets the two
- * `ADVENTURE_CLEAR` quests to `MANUAL`, moves the stage-clear magic rewards into the chests and
- * deprecates quests 5 to 10.
+ * `ADVENTURE_CLEAR` quests to `MANUAL` and deprecates quests 5 to 10. Each chest still holds the
+ * single `APPEARANCE` reward V021 gave it.
  *
  * Gated on `QUEST_IT_DATABASE_URL`, like the other Postgres tests. [MigratedPostgresDatabase] builds
  * the database [DATABASE_NAME] from `QUEST_IT_MIGRATION_DIR`.
@@ -296,10 +298,26 @@ class QuestClaimPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("숲_모험을_끝내면_퀘스트_11_이_claimable_이고_claim_하면_forest_chest_를_받으며_열면_마법_4개와_grass_외형을_준다")
+    @DisplayName("숲_모험을_끝내면_퀘스트_11_이_claimable_이고_claim_하면_forest_chest_를_받으며_열면_grass_외형만_주고_고를_수_있다")
     fun forestAdventureEndToEnd() = runBlocking<Unit> {
-        val questId = adventureQuestId("forest")
-        val forestChestId = chestId("forest_chest")
+        claimOpenAndSelect(adventureName = "forest", chestKey = "forest_chest", appearanceKey = "grass")
+    }
+
+    @Test
+    @DisplayName("요새_모험을_끝내면_퀘스트_12_가_claimable_이고_claim_하면_fortress_chest_를_받으며_열면_golem_외형만_주고_고를_수_있다")
+    fun fortressAdventureEndToEnd() = runBlocking<Unit> {
+        claimOpenAndSelect(adventureName = "fortress", chestKey = "fortress_chest", appearanceKey = "golem")
+    }
+
+    /**
+     * The whole player path on the real seed: the adventure's quest is listed `MANUAL` and not
+     * claimable, finishing the adventure makes it claimable, the claim answers 200 with the chest,
+     * the chest lists its single `APPEARANCE` reward, opening it grants only that appearance, and the
+     * player can then select it.
+     */
+    private suspend fun claimOpenAndSelect(adventureName: String, chestKey: String, appearanceKey: String) {
+        val questId = adventureQuestId(adventureName)
+        val chestRowId = chestId(chestKey)
         val service = questService()
         val chestService = ChestService(chestRepository, registry(), transactionalOperator)
 
@@ -307,7 +325,7 @@ class QuestClaimPostgresIntegrationTest {
         assertThat(before.claimMode).isEqualTo("MANUAL")
         assertThat(before.claimable).isFalse()
 
-        finishAdventure("forest")
+        finishAdventure(adventureName)
         val met = service.findMyQuests(userId).single { it.questId == questId }
         assertThat(met.claimable).isTrue()
         assertThat(met.state).isEqualTo(QuestState.IN_PROGRESS)
@@ -316,28 +334,25 @@ class QuestClaimPostgresIntegrationTest {
         val response = controller(service).claimQuest(userId, questId)
         assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
         assertThat(jacksonObjectMapper().writeValueAsString(response.body))
-            .isEqualTo("""{"rewards":[{"rewardType":"CHEST","rewardId":$forestChestId,"rewardKey":"forest_chest","amount":1}]}""")
+            .isEqualTo("""{"rewards":[{"rewardType":"CHEST","rewardId":$chestRowId,"rewardKey":"$chestKey","amount":1}]}""")
 
         val claimed = service.findMyQuests(userId).single { it.questId == questId }
         assertThat(claimed.state).isEqualTo(QuestState.COMPLETED)
         assertThat(claimed.claimable).isFalse()
 
         val chest = chestService.findMyChests(userId).single()
-        assertThat(chest.chestKey).isEqualTo("forest_chest")
-        val expectedContents = listOf(48L, 49L, 50L, 27L).map { ChestRewardDto("MAGIC", it, null, 1) } +
-            ChestRewardDto("APPEARANCE", appearanceId("grass"), "grass", 1)
-        assertThat(chest.rewards).containsExactlyInAnyOrderElementsOf(expectedContents)
+        assertThat(chest.chestKey).isEqualTo(chestKey)
+        val expectedContents = listOf(ChestRewardDto("APPEARANCE", appearanceId(appearanceKey), appearanceKey, 1))
+        assertThat(chest.rewards).isEqualTo(expectedContents)
 
-        val opened = chestService.openChest(userId, chest.id)
-        assertThat((opened as ChestOpenResult.Opened).rewards).containsExactlyInAnyOrderElementsOf(expectedContents)
+        assertThat(chestService.openChest(userId, chest.id)).isEqualTo(ChestOpenResult.Opened(expectedContents))
         assertThat(chestService.findMyChests(userId)).isEmpty()
-        assertThat(queryString("SELECT string_agg(magic_id::text, ',' ORDER BY magic_id) FROM user_magics WHERE user_id = $userId"))
-            .isEqualTo("27,48,49,50")
-        assertThat(
-            queryLong(
-                "SELECT COUNT(*) FROM user_appearances WHERE user_id = $userId AND appearance_id = ${appearanceId("grass")}",
-            ),
-        ).isEqualTo(1L)
+        assertThat(queryLong("SELECT COUNT(*) FROM user_magics WHERE user_id = $userId")).isZero()
+        assertThat(queryString("SELECT string_agg(a.key, ',') FROM user_appearances ua JOIN appearances a ON a.id = ua.appearance_id WHERE ua.user_id = $userId"))
+            .isEqualTo(appearanceKey)
+        assertThat(AppearanceService(appearanceRepository).selectAppearance(userId, appearanceKey))
+            .isEqualTo(AppearanceSelection.Selected(appearanceKey))
+        assertThat(queryString("SELECT appearance FROM users WHERE id = $userId")).isEqualTo(appearanceKey)
     }
 
     companion object {

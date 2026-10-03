@@ -54,7 +54,8 @@ import reactor.core.publisher.Mono
 
 /**
  * Runs the appearance and chest code against a real Postgres built from the WordOnlineDatabase
- * migrations, including the V020..V022 catalog and the chest contents V024 adds.
+ * migrations through V024, including the V020..V022 catalog: each seeded chest holds one `APPEARANCE`
+ * row, so a test that needs several rows in one chest builds that chest itself.
  *
  * Gated on the same `QUEST_IT_DATABASE_URL` as [com.wordonline.matching.quest.service.QuestPostgresIntegrationTest].
  * [MigratedPostgresDatabase] builds the database [DATABASE_NAME] from `QUEST_IT_MIGRATION_DIR`,
@@ -187,11 +188,41 @@ class AppearanceChestPostgresIntegrationTest {
 
         val results = (1..6).map { async(Dispatchers.IO) { service.openChest(userId, userChestId) } }.awaitAll()
 
-        assertThat(results.filterIsInstance<ChestOpenResult.Opened>().single().rewards.map { it.rewardType to it.rewardKey })
-            .containsExactlyInAnyOrder("APPEARANCE" to "grass", "MAGIC" to null, "MAGIC" to null, "MAGIC" to null, "MAGIC" to null)
+        assertThat(results.filterIsInstance<ChestOpenResult.Opened>().single().rewards)
+            .containsExactly(ChestRewardDto("APPEARANCE", appearanceId("grass"), "grass", 1))
         assertThat(results.filter { it == ChestOpenResult.AlreadyOpened }).hasSize(5)
         assertThat(ownedAppearanceCount("grass")).isEqualTo(1L)
         assertThat(queryLong("SELECT COUNT(*) FROM user_chests WHERE id = $userChestId AND opened_at IS NOT NULL")).isEqualTo(1L)
+    }
+
+    @Test
+    @DisplayName("내용물이_여러_행인_상자는_목록에_모두_보이고_열면_모든_행을_한_번에_지급한다")
+    fun multiRewardChestGrantsEveryRow() = runBlocking<Unit> {
+        // The seeded chests hold one row each, so this test builds its own chest with several rows.
+        val chestKey = "it_multi_$userId"
+        val multiChestId = queryLong("INSERT INTO chests (key) VALUES ('$chestKey') RETURNING id")!!
+        val firstMagicId = queryLong("SELECT MIN(id) FROM magics")!!
+        val secondMagicId = queryLong("SELECT MIN(id) FROM magics WHERE id > $firstMagicId")!!
+        exec(
+            "INSERT INTO chest_rewards (chest_id, reward_type, target_id, amount) VALUES " +
+                "($multiChestId, 'APPEARANCE', ${appearanceId("blaze")}, 1), " +
+                "($multiChestId, 'MAGIC', $firstMagicId, 2), " +
+                "($multiChestId, 'MAGIC', $secondMagicId, 1)",
+        )
+        val userChestId = giveChest(chestKey)
+        val expectedContents = listOf(
+            ChestRewardDto("APPEARANCE", appearanceId("blaze"), "blaze", 1),
+            ChestRewardDto("MAGIC", firstMagicId, null, 2),
+            ChestRewardDto("MAGIC", secondMagicId, null, 1),
+        )
+
+        assertThat(chestService().findMyChests(userId).single().rewards).containsExactlyElementsOf(expectedContents)
+        assertThat(chestService().openChest(userId, userChestId)).isEqualTo(ChestOpenResult.Opened(expectedContents))
+        assertThat(chestService().openChest(userId, userChestId)).isEqualTo(ChestOpenResult.AlreadyOpened)
+
+        assertThat(ownedAppearanceCount("blaze")).isEqualTo(1L)
+        assertThat(queryLong("SELECT count FROM user_magics WHERE user_id = $userId AND magic_id = $firstMagicId")).isEqualTo(2L)
+        assertThat(queryLong("SELECT count FROM user_magics WHERE user_id = $userId AND magic_id = $secondMagicId")).isEqualTo(1L)
     }
 
     @Test
