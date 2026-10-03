@@ -10,7 +10,6 @@ import com.wordonline.matching.decoration.repository.UserDecorationRepository
 import com.wordonline.matching.quest.condition.AdventureClearCondition
 import com.wordonline.matching.quest.condition.StageClearCondition
 import com.wordonline.matching.quest.condition.TotalWinCondition
-import com.wordonline.matching.quest.dto.QuestRewardDto
 import com.wordonline.matching.quest.repository.QuestConditionRepository
 import com.wordonline.matching.quest.repository.QuestRepository
 import com.wordonline.matching.quest.repository.QuestRewardRepository
@@ -24,12 +23,10 @@ import com.wordonline.matching.quest.reward.RewardGrantor
 import com.wordonline.matching.quest.reward.RewardNotGrantableException
 import com.wordonline.matching.quest.service.QuestRegistry
 import com.wordonline.matching.quest.service.QuestRegistryStartupCheck
-import com.wordonline.matching.quest.service.QuestService
 import com.wordonline.matching.quest.service.UnknownQuestTypeException
+import com.wordonline.matching.support.MigratedPostgresDatabase
 import io.r2dbc.spi.Closeable
-import io.r2dbc.spi.ConnectionFactories
 import io.r2dbc.spi.ConnectionFactory
-import io.r2dbc.spi.ConnectionFactoryOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -53,19 +50,16 @@ import org.springframework.data.r2dbc.repository.support.R2dbcRepositoryFactory
 import org.springframework.r2dbc.connection.R2dbcTransactionManager
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.transaction.reactive.TransactionalOperator
-import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
-import java.io.File
 
 /**
  * Runs the appearance and chest code against a real Postgres built from the WordOnlineDatabase
- * migrations, including the V020..V022 catalog and the two `ADVENTURE_CLEAR` quests V022 seeds.
+ * migrations, including the V020..V022 catalog and the chest contents V024 adds.
  *
  * Gated on the same `QUEST_IT_DATABASE_URL` as [com.wordonline.matching.quest.service.QuestPostgresIntegrationTest].
- * It does not touch the database that URL names: it drops and recreates the database
- * [DATABASE_NAME] on the same server (so the user needs `CREATEDB`) and replays every
- * `V*.sql` file of `QUEST_IT_MIGRATION_DIR` (default `../database/migration`) in version order, each
- * file in one transaction like `psql --single-transaction`. The directory must hold V022 or later.
+ * [MigratedPostgresDatabase] builds the database [DATABASE_NAME] from `QUEST_IT_MIGRATION_DIR`,
+ * which must hold V024 or later. The claim of the adventure quests that hand out these chests is
+ * covered by [com.wordonline.matching.quest.service.QuestClaimPostgresIntegrationTest].
  *
  * ```
  * QUEST_IT_DATABASE_URL=r2dbc:pool:postgresql://quest:quest@localhost:55477/quest_it \
@@ -95,28 +89,7 @@ class AppearanceChestPostgresIntegrationTest {
 
     @BeforeAll
     fun buildDatabaseFromMigrations() = runBlocking<Unit> {
-        val baseOptions = ConnectionFactoryOptions.parse(System.getenv("QUEST_IT_DATABASE_URL"))
-        val migrations = migrationFiles()
-
-        withConnection(ConnectionFactories.get(directOptions(baseOptions, baseOptions.getValue(ConnectionFactoryOptions.DATABASE) as String))) {
-            executeSimple(it, "DROP DATABASE IF EXISTS $DATABASE_NAME WITH (FORCE)")
-            executeSimple(it, "CREATE DATABASE $DATABASE_NAME")
-        }
-        // One unpooled connection replays everything. V001 sets search_path to '' for its session,
-        // so this connection is closed afterwards instead of going back to a pool.
-        withConnection(ConnectionFactories.get(directOptions(baseOptions, DATABASE_NAME))) { connection ->
-            migrations.forEach { file ->
-                try {
-                    executeSimple(connection, "BEGIN;\n${file.readText()}\n;COMMIT;")
-                } catch (e: Exception) {
-                    throw IllegalStateException("migration ${file.name} failed", e)
-                }
-            }
-        }
-
-        connectionFactory = ConnectionFactories.get(
-            ConnectionFactoryOptions.builder().from(baseOptions).option(ConnectionFactoryOptions.DATABASE, DATABASE_NAME).build(),
-        )
+        connectionFactory = MigratedPostgresDatabase.build(DATABASE_NAME, requiredVersion = 24)
         databaseClient = DatabaseClient.create(connectionFactory)
         val repositoryFactory = R2dbcRepositoryFactory(R2dbcEntityTemplate(databaseClient, PostgresDialect.INSTANCE))
         questRepository = repositoryFactory.getRepository(QuestRepository::class.java)
@@ -139,44 +112,6 @@ class AppearanceChestPostgresIntegrationTest {
     @BeforeEach
     fun createUser() = runBlocking<Unit> {
         userId = queryLong("INSERT INTO users (id) SELECT COALESCE(MAX(id), 0) + 1 FROM users RETURNING id")!!
-    }
-
-    private fun migrationFiles(): List<File> {
-        val directory = File(System.getenv("QUEST_IT_MIGRATION_DIR") ?: "../database/migration")
-        val files = directory.listFiles { file -> file.name.matches(Regex("""V\d+_.*\.sql""")) }
-            ?.sortedBy { it.name.substringAfter('V').substringBefore('_').toInt() }
-            .orEmpty()
-        check(files.any { it.name.startsWith("V022_") }) {
-            "QUEST_IT_MIGRATION_DIR (${directory.absolutePath}) must hold the WordOnlineDatabase migrations through V022"
-        }
-        return files
-    }
-
-    private fun directOptions(base: ConnectionFactoryOptions, database: String): ConnectionFactoryOptions =
-        ConnectionFactoryOptions.builder()
-            .option(ConnectionFactoryOptions.DRIVER, "postgresql")
-            .option(ConnectionFactoryOptions.HOST, base.getRequiredValue(ConnectionFactoryOptions.HOST) as String)
-            .option(ConnectionFactoryOptions.PORT, (base.getValue(ConnectionFactoryOptions.PORT) as Int?) ?: 5432)
-            .option(ConnectionFactoryOptions.USER, base.getRequiredValue(ConnectionFactoryOptions.USER) as String)
-            .option(ConnectionFactoryOptions.PASSWORD, base.getRequiredValue(ConnectionFactoryOptions.PASSWORD) as CharSequence)
-            .option(ConnectionFactoryOptions.DATABASE, database)
-            .build()
-
-    private suspend fun withConnection(factory: ConnectionFactory, block: suspend (io.r2dbc.spi.Connection) -> Unit) {
-        val connection = Mono.from(factory.create()).awaitSingle()
-        try {
-            block(connection)
-        } finally {
-            Mono.from(connection.close()).awaitSingleOrNull()
-        }
-    }
-
-    /** Runs [sql] without parameters, which the driver sends as one simple query, so it may hold many statements. */
-    private suspend fun executeSimple(connection: io.r2dbc.spi.Connection, sql: String) {
-        Flux.from(connection.createStatement(sql).execute())
-            .concatMap { result -> Flux.from(result.rowsUpdated) }
-            .then()
-            .awaitSingleOrNull()
     }
 
     private suspend fun exec(sql: String) {
@@ -252,8 +187,8 @@ class AppearanceChestPostgresIntegrationTest {
 
         val results = (1..6).map { async(Dispatchers.IO) { service.openChest(userId, userChestId) } }.awaitAll()
 
-        assertThat(results.filterIsInstance<ChestOpenResult.Opened>().single().rewards)
-            .containsExactly(ChestRewardDto("APPEARANCE", appearanceId("grass"), "grass", 1))
+        assertThat(results.filterIsInstance<ChestOpenResult.Opened>().single().rewards.map { it.rewardType to it.rewardKey })
+            .containsExactlyInAnyOrder("APPEARANCE" to "grass", "MAGIC" to null, "MAGIC" to null, "MAGIC" to null, "MAGIC" to null)
         assertThat(results.filter { it == ChestOpenResult.AlreadyOpened }).hasSize(5)
         assertThat(ownedAppearanceCount("grass")).isEqualTo(1L)
         assertThat(queryLong("SELECT COUNT(*) FROM user_chests WHERE id = $userChestId AND opened_at IS NOT NULL")).isEqualTo(1L)
@@ -324,40 +259,6 @@ class AppearanceChestPostgresIntegrationTest {
 
         assertThat(ownedAppearanceCount("blaze")).isEqualTo(1L)
         assertThat(queryLong("SELECT COUNT(*) FROM user_appearances WHERE user_id = $userId")).isEqualTo(1L)
-    }
-
-    @Test
-    @DisplayName("V022_의_ADVENTURE_CLEAR_퀘스트를_끝내면_열지_않은_상자를_받고_열면_외형을_받아_고를_수_있다")
-    fun adventureClearQuestYieldsChestThatGrantsAppearance() = runBlocking<Unit> {
-        val forestAdventureId = queryLong("SELECT id FROM adventures WHERE name = 'forest'")!!
-        val questId = queryLong(
-            "SELECT id FROM quests WHERE condition_type = 'ADVENTURE_CLEAR' AND condition_target_id = $forestAdventureId",
-        )!!
-        exec(
-            "INSERT INTO user_scenarios (user_id, scenario_id, state) " +
-                "SELECT $userId, sc.id, 'FINISHED' FROM scenarios sc JOIN stages st ON st.id = sc.stage_id " +
-                "WHERE st.adventure_id = $forestAdventureId",
-        )
-        val questService = QuestService(questRepository, questRewardRepository, userQuestRepository, registry(), transactionalOperator)
-
-        assertThat(questService.findMyQuests(userId).single { it.questId == questId }.rewards.single().rewardKey)
-            .isEqualTo("forest_chest")
-        assertThat(questService.checkQuestsWithRewards(userId))
-            .contains(QuestRewardDto("CHEST", chestId("forest_chest"), "forest_chest", 1, questId))
-        assertThat(questService.checkQuestsWithRewards(userId).filter { it.questId == questId }).isEmpty()
-
-        val chests = chestService().findMyChests(userId)
-        val chest = chests.single()
-        assertThat(chest.chestKey).isEqualTo("forest_chest")
-        assertThat(chest.rewards).containsExactly(ChestRewardDto("APPEARANCE", appearanceId("grass"), "grass", 1))
-        assertThat(ownedAppearanceCount("grass")).isZero()
-
-        assertThat(chestService().openChest(userId, chest.id))
-            .isEqualTo(ChestOpenResult.Opened(listOf(ChestRewardDto("APPEARANCE", appearanceId("grass"), "grass", 1))))
-        assertThat(chestService().findMyChests(userId)).isEmpty()
-        assertThat(ownedAppearanceCount("grass")).isEqualTo(1L)
-        assertThat(AppearanceService(appearanceRepository).selectAppearance(userId, "grass"))
-            .isEqualTo(AppearanceSelection.Selected("grass"))
     }
 
     @Test

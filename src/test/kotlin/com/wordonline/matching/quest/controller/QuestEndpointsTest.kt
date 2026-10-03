@@ -9,11 +9,15 @@ import com.wordonline.matching.quest.dto.QuestProgressResponseDto
 import com.wordonline.matching.quest.dto.QuestRewardDto
 import com.wordonline.matching.quest.dto.QuestSummaryResponseDto
 import com.wordonline.matching.quest.dto.QuestSummaryRewardDto
+import com.wordonline.matching.quest.service.QuestClaimResult
 import com.wordonline.matching.quest.service.QuestService
 import com.wordonline.matching.session.service.LegacyGameMatchService
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest
@@ -24,7 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.reactive.server.WebTestClient
 
 /** Response shapes of the quest endpoints, which the Unity client parses. */
-@WebFluxTest(controllers = [QuestProgressController::class, UserController::class])
+@WebFluxTest(controllers = [QuestProgressController::class, QuestClaimController::class, UserController::class])
 @Import(UserIdResolver::class)
 class QuestEndpointsTest {
 
@@ -119,6 +123,8 @@ class QuestEndpointsTest {
                         state = QuestState.IN_PROGRESS,
                         progress = 2,
                         requireValue = 3,
+                        claimMode = "AUTO",
+                        claimable = false,
                         rewards = listOf(
                             QuestSummaryRewardDto("MAGIC", 83L, null, 2),
                             QuestSummaryRewardDto("APPEARANCE", 6L, "grass", 1),
@@ -131,7 +137,20 @@ class QuestEndpointsTest {
                         state = QuestState.PENDING,
                         progress = 0,
                         requireValue = 10,
+                        claimMode = "AUTO",
+                        claimable = false,
                         rewards = emptyList(),
+                    ),
+                    QuestSummaryResponseDto(
+                        questId = 11L,
+                        conditionType = "ADVENTURE_CLEAR",
+                        conditionTargetId = 1L,
+                        state = QuestState.IN_PROGRESS,
+                        progress = 3,
+                        requireValue = 3,
+                        claimMode = "MANUAL",
+                        claimable = true,
+                        rewards = listOf(QuestSummaryRewardDto("CHEST", 1L, "forest_chest", 1)),
                     ),
                 ),
             )
@@ -145,13 +164,58 @@ class QuestEndpointsTest {
                 """
                 [
                   {"questId":1,"conditionType":"STAGE_CLEAR","conditionTargetId":null,"state":"IN_PROGRESS",
-                   "progress":2,"requireValue":3,"rewards":[{"rewardType":"MAGIC","rewardId":83,"rewardKey":null,"amount":2},
+                   "progress":2,"requireValue":3,"claimMode":"AUTO","claimable":false,"rewards":[{"rewardType":"MAGIC","rewardId":83,"rewardKey":null,"amount":2},
                               {"rewardType":"APPEARANCE","rewardId":6,"rewardKey":"grass","amount":1}]},
                   {"questId":2,"conditionType":"TOTAL_WIN","conditionTargetId":7,"state":"PENDING",
-                   "progress":0,"requireValue":10,"rewards":[]}
+                   "progress":0,"requireValue":10,"claimMode":"AUTO","claimable":false,"rewards":[]},
+                  {"questId":11,"conditionType":"ADVENTURE_CLEAR","conditionTargetId":1,"state":"IN_PROGRESS",
+                   "progress":3,"requireValue":3,"claimMode":"MANUAL","claimable":true,
+                   "rewards":[{"rewardType":"CHEST","rewardId":1,"rewardKey":"forest_chest","amount":1}]}
                 ]
                 """,
                 true,
             )
+    }
+
+    private fun claim(questId: Long) =
+        client().mutateWith(csrf()).post().uri("/api/users/mine/quests/{questId}/claim", questId).exchange()
+
+    @Test
+    @DisplayName("퀘스트_claim_응답은_지급한_보상마다_rewardType_rewardId_rewardKey_amount_를_담은_rewards_배열이다")
+    fun claimQuest_Shape() {
+        runBlocking {
+            whenever(questService.claimQuest(userId, 11L)).thenReturn(
+                QuestClaimResult.Claimed(listOf(QuestSummaryRewardDto("CHEST", 1L, "forest_chest", 1))),
+            )
+        }
+
+        claim(11L)
+            .expectStatus().isOk
+            .expectBody()
+            .json("""{"rewards":[{"rewardType":"CHEST","rewardId":1,"rewardKey":"forest_chest","amount":1}]}""", true)
+    }
+
+    @Test
+    @DisplayName("없거나_DEPRECATED_인_퀘스트는_404_이미_받은_퀘스트는_409_조건을_못_채운_퀘스트는_422_다")
+    fun claimQuest_ErrorStatuses() {
+        runBlocking {
+            whenever(questService.claimQuest(userId, 5L)).thenReturn(QuestClaimResult.NotFound)
+            whenever(questService.claimQuest(userId, 11L)).thenReturn(QuestClaimResult.AlreadyClaimed)
+            whenever(questService.claimQuest(userId, 12L)).thenReturn(QuestClaimResult.NotClaimable)
+        }
+
+        claim(5L).expectStatus().isNotFound.expectBody(String::class.java).isEqualTo("quest 5 not found")
+        claim(11L).expectStatus().isEqualTo(409).expectBody(String::class.java).isEqualTo("quest 11 is already claimed")
+        claim(12L).expectStatus().isEqualTo(422).expectBody(String::class.java).isEqualTo("quest 12 is not completed yet")
+    }
+
+    @Test
+    @DisplayName("인증하지_않은_claim_은_401_이고_서비스를_부르지_않는다")
+    fun claimQuest_RequiresAuthentication() {
+        webTestClient.mutateWith(csrf()).post().uri("/api/users/mine/quests/{questId}/claim", 11L)
+            .exchange()
+            .expectStatus().isUnauthorized
+
+        verifyBlocking(questService, never()) { claimQuest(any(), any()) }
     }
 }

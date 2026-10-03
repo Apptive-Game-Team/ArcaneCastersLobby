@@ -44,6 +44,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Runs the quest repositories, the claim transaction and the grantors against a real Postgres.
+ * The explicit claim and `claim_mode` are covered against the real migrations by
+ * [QuestClaimPostgresIntegrationTest].
  * Mocks cannot show that the conditional `UPDATE` serializes concurrent claims or that a failed
  * grant rolls the claim back; this does.
  *
@@ -276,7 +278,8 @@ class QuestPostgresIntegrationTest {
     companion object {
         /**
          * The columns these queries touch, shaped like the live database after the migration that
-         * adds `condition_type` and `quest_rewards`: the legacy quest columns are nullable,
+         * adds `condition_type` and `quest_rewards` and the one that adds `claim_mode` (V024, default
+         * `AUTO`): the legacy quest columns are nullable,
          * `user_quests` is unique on (`user_id`, `quest_id`), and `user_magics.count` defaults to 3.
          */
         private val SCHEMA = """
@@ -305,7 +308,8 @@ class QuestPostgresIntegrationTest {
                 reward_giver varchar(31),
                 access_type varchar(10) NOT NULL DEFAULT 'DEFAULT',
                 condition_type varchar(31) NOT NULL,
-                condition_target_id bigint
+                condition_target_id bigint,
+                claim_mode varchar(10) NOT NULL DEFAULT 'AUTO'
             );
             CREATE TABLE quest_rewards (
                 id bigserial PRIMARY KEY,
