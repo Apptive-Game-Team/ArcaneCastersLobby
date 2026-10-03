@@ -1,6 +1,5 @@
 package com.wordonline.matching.adventure.repository;
 
-import com.wordonline.matching.quest.dto.CountDto;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
 
@@ -56,20 +55,4 @@ public interface UserScenarioRepository extends R2dbcRepository<UserScenario, Lo
             """
     )
     Mono<Void> updateStateActiveWhenBeforeScenarioIsFinished(Long userId);
-
-    @Query(
-            """
-            SELECT COUNT(*) AS count
-            FROM (
-                SELECT st.id
-                FROM stages st
-                JOIN scenarios sc ON st.id = sc.stage_id
-                JOIN user_scenarios us ON sc.id = us.scenario_id
-                WHERE us.user_id = :userId
-                GROUP BY st.id
-                HAVING COUNT(sc.id) = COUNT(CASE WHEN us.state = 'FINISHED' THEN 1 END)
-            ) AS finished_stages
-            """
-    )
-    Mono<CountDto> countFinishedStageByUserId(Long userId);
 }

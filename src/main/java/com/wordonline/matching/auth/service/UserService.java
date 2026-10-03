@@ -16,6 +16,7 @@ import com.wordonline.matching.auth.repository.UserRepository;
 import com.wordonline.matching.matching.client.AccountClient;
 import com.wordonline.matching.global.service.LocalizationService;
 import com.wordonline.matching.matching.repository.MatchingQueueRepository;
+import com.wordonline.matching.quest.repository.UserQuestRepository;
 import com.wordonline.matching.server.dto.RoomInfoDto;
 import com.wordonline.matching.server.service.GameSessionService;
 import com.wordonline.matching.session.service.SessionRecoveryStore;
@@ -36,6 +37,7 @@ public class UserService {
     private final MatchingQueueRepository matchingQueueRepository;
     private final SessionRecoveryStore sessionRecoveryStore;
     private final GameSessionService gameSessionService;
+    private final UserQuestRepository userQuestRepository;
 
     public Mono<UserResponseDto> getUser(long memberId) {
         return findUserDomain(memberId)
@@ -46,7 +48,7 @@ public class UserService {
     private Mono<User> initialUser(long memberId) {
         return userRepository.insertUser(memberId)
                 .then(userRepository.initUserMagic(memberId))
-                .then(userRepository.initUserQuest(memberId))
+                .then(userQuestRepository.insertMissing(memberId))
                 .then(userRepository.initUserDeck(memberId))
                 .then(userRepository.findById(memberId));
     }
