@@ -8,5 +8,6 @@ public record CardListItem(
         int count,
         boolean unlocked,
         String unlockText,
-        String progressText
+        String progressText,
+        String castKind
 ) {}

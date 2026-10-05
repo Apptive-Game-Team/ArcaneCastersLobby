@@ -1,5 +1,7 @@
 package com.wordonline.matching.auth.service;
 
+import java.util.Optional;
+
 import org.springframework.context.i18n.LocaleContext;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,7 @@ import com.wordonline.matching.auth.repository.UserRepository;
 import com.wordonline.matching.matching.client.AccountClient;
 import com.wordonline.matching.global.service.LocalizationService;
 import com.wordonline.matching.matching.repository.MatchingQueueRepository;
+import com.wordonline.matching.quest.repository.UserQuestRepository;
 import com.wordonline.matching.server.dto.RoomInfoDto;
 import com.wordonline.matching.server.service.GameSessionService;
 import com.wordonline.matching.session.service.SessionRecoveryStore;
@@ -34,6 +37,7 @@ public class UserService {
     private final MatchingQueueRepository matchingQueueRepository;
     private final SessionRecoveryStore sessionRecoveryStore;
     private final GameSessionService gameSessionService;
+    private final UserQuestRepository userQuestRepository;
 
     public Mono<UserResponseDto> getUser(long memberId) {
         return findUserDomain(memberId)
@@ -44,17 +48,27 @@ public class UserService {
     private Mono<User> initialUser(long memberId) {
         return userRepository.insertUser(memberId)
                 .then(userRepository.initUserMagic(memberId))
-                .then(userRepository.initUserQuest(memberId))
+                .then(userQuestRepository.insertMissing(memberId))
                 .then(userRepository.initUserDeck(memberId))
                 .then(userRepository.findById(memberId));
     }
 
     public Mono<UserDetailResponseDto> getUserDetail(Long memberId) {
         return accountClient.getMember(memberId)
-                .map(accountMemberResponseDto -> {
+                .flatMap(accountMemberResponseDto -> {
                     log.info(accountMemberResponseDto.toString());
-                    return new UserDetailResponseDto(memberId, accountMemberResponseDto);
+                    return findAppearance(memberId)
+                            .map(appearance -> new UserDetailResponseDto(
+                                    memberId, accountMemberResponseDto, appearance.orElse(null)));
                 });
+    }
+
+    // Humans and bots both read the look from their own users row. A missing row or a null column
+    // gives an empty Optional, which the dto sends as null.
+    private Mono<Optional<String>> findAppearance(long memberId) {
+        return userRepository.findById(memberId)
+                .map(user -> Optional.ofNullable(user.getAppearance()))
+                .defaultIfEmpty(Optional.empty());
     }
 
     public Mono<Void> deleteUser(long userId) {

@@ -30,7 +30,8 @@ public class CardListService {
                             r.count(),
                             r.unlocked(),
                             r.unlockText(),
-                            r.progressText()
+                            r.progressText(),
+                            r.castKind()
                     );
                 })
                 .collectList()
