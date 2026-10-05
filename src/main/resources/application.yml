@@ -93,3 +93,7 @@ gameserver:
   # Consecutive failed probes before a server stops receiving new sessions.
   # One success restores it immediately.
   failure-threshold: ${GAMESERVER_FAILURE_THRESHOLD:3}
+
+# Explicit development opt-in; disabled on ordinary servers.
+playground:
+  enabled: ${PLAYGROUND_ENABLED:false}
