@@ -84,6 +84,23 @@ class LegacyGameMatchServiceTest {
     private val sessionDto = SessionDto.PVP("session-1", 1L, 2L)
 
     @Test
+    fun `두 참가자의 최대 핑이 낮은 서버에 먼저 세션을 요청한다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers())
+            .thenReturn(listOf(server(1L, "alpha"), server(2L, "beta")))
+
+        service { readyResponse(true) }.createSession(
+            sessionDto,
+            "attempt-1",
+            listOf(mapOf(1L to 20L, 2L to 80L), mapOf(1L to 300L, 2L to 90L)),
+        )
+
+        assertThat(sentRequests.map { it.url().host })
+            .`as`("alpha의 최대 핑은 300, beta는 90이므로 beta가 먼저여야 한다")
+            .containsExactly("beta")
+    }
+
+    @Test
     fun `첫 서버가 거절하면 다음 서버로 넘어가고 수락한 서버의 URL을 반환한다`() = runTest {
         stubUsers()
         whenever(gameServerManagementService.getAvailableServers())

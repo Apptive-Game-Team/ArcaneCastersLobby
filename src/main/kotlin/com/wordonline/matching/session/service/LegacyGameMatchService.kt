@@ -9,6 +9,7 @@ import com.wordonline.matching.server.entity.Server
 import com.wordonline.matching.server.exception.GameServerUnreachableException
 import com.wordonline.matching.server.exception.NoAvailableGameServerException
 import com.wordonline.matching.server.service.GameServerManagementService
+import com.wordonline.matching.server.service.GameServerPingSelector
 import com.wordonline.matching.session.domain.SessionPlacement
 import com.wordonline.matching.session.domain.SessionRecoveryInfo
 import com.wordonline.matching.session.dto.SimpleBooleanDto
@@ -44,7 +45,9 @@ class LegacyGameMatchService(
     /**
      * Places a session on the first game server that accepts it.
      *
-     * Candidates are tried in order and a refusal is not fatal: a game server that has
+     * Candidates are ordered by the highest ping any participant reported to them, lowest first
+     * (see [GameServerPingSelector]); without reported pings the discovery order is kept.
+     * They are tried in that order and a refusal is not fatal: a game server that has
      * already flipped itself out of `ACTIVE` answers `false`, and a redeploying one drops
      * the connection. Both used to fail the whole match even when another healthy server
      * was sitting right there.
@@ -55,8 +58,15 @@ class LegacyGameMatchService(
      * out. Looking the users up once outside the loop also keeps a failover from re-querying
      * the account server per candidate.
      */
-    suspend fun createSession(sessionDto: SessionDto, attemptId: String = UUID.randomUUID().toString()): SessionPlacement {
-        val candidates = gameServerManagementService.getAvailableServers()
+    suspend fun createSession(
+        sessionDto: SessionDto,
+        attemptId: String = UUID.randomUUID().toString(),
+        participantPings: List<Map<Long, Long>> = emptyList(),
+    ): SessionPlacement {
+        val candidates = GameServerPingSelector.order(
+            gameServerManagementService.getAvailableServers(),
+            participantPings,
+        )
         if (candidates.isEmpty()) {
             throw NoAvailableGameServerException(localizedMessage("error.gameserver.unavailable"))
         }

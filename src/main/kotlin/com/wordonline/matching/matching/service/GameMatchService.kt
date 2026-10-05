@@ -5,6 +5,10 @@ import com.wordonline.matching.deck.service.DeckService
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.MatchDeckMode
 import com.wordonline.matching.matching.dto.SessionDto
+import com.wordonline.matching.matching.dto.GameServerEndpointDto
+import com.wordonline.matching.matching.dto.ServerPingDto
+import com.wordonline.matching.server.service.GameServerManagementService
+import com.wordonline.matching.server.service.GameServerPingSelector
 import com.wordonline.matching.matching.dto.SimpleMessageDto
 import com.wordonline.matching.matching.config.MatchTicketProperties
 import com.wordonline.matching.matching.domain.CancelMatchResponse
@@ -40,6 +44,7 @@ class GameMatchService(
     private val matchingQueueRepository: MatchingQueueRepository,
     private val matchTicketRepository: MatchTicketRepository,
     private val matchTicketProperties: MatchTicketProperties,
+    private val gameServerManagementService: GameServerManagementService,
 ) {
     private val clock = Clock.systemUTC()
     private val log = LoggerFactory.getLogger(javaClass)
@@ -94,10 +99,10 @@ class GameMatchService(
         return SimpleMessageDto("Successfully Enqueued")
     }
 
-    suspend fun createTicket(userId: Long, deckMode: MatchDeckMode): MatchTicket =
-        enqueue(userId, deckMode) ?: throw IllegalStateException("Failed to enqueue user")
+    suspend fun createTicket(userId: Long, deckMode: MatchDeckMode, serverPings: List<ServerPingDto>? = null): MatchTicket =
+        enqueue(userId, deckMode, serverPings) ?: throw IllegalStateException("Failed to enqueue user")
 
-    private suspend fun enqueue(userId: Long, deckMode: MatchDeckMode): MatchTicket? {
+    private suspend fun enqueue(userId: Long, deckMode: MatchDeckMode, serverPings: List<ServerPingDto>? = null): MatchTicket? {
         return try {
             val deckCardIds = when (deckMode) {
                 MatchDeckMode.SELECTED -> {
@@ -116,6 +121,7 @@ class GameMatchService(
                     MatchTicketState.QUEUED,
                     1,
                     deckCardIds = deckCardIds,
+                    serverPings = GameServerPingSelector.sanitize(serverPings?.associate { it.serverId to it.rttMs }),
                     createdAt = now,
                     updatedAt = now,
                 ),
@@ -195,7 +201,11 @@ class GameMatchService(
             )
 
             try {
-                val placement = legacyGameMatchService.createSession(sessionDto, attemptId)
+                val placement = legacyGameMatchService.createSession(
+                    sessionDto,
+                    attemptId,
+                    listOf(first.serverPings.orEmpty(), second.serverPings.orEmpty()),
+                )
                 val matchedAt = Instant.now(clock)
                 // The host's boot generation rides on the ticket: it is the only way to tell
                 // later that the process holding this in-memory session was replaced.
@@ -260,6 +270,12 @@ class GameMatchService(
             }
         }
     }
+
+    /** Game servers a client can currently measure its ping to before queueing. */
+    fun getPingTargets(): List<GameServerEndpointDto> =
+        gameServerManagementService.getAvailableServers().mapNotNull { server ->
+            GameServerEndpointDto(server.id ?: return@mapNotNull null, server.url)
+        }
 
     suspend fun getQueueLength(): Long = matchTicketRepository.size()
 

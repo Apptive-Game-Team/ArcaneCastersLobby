@@ -138,7 +138,13 @@ Redis `MatchTicket`이 매칭 상태의 source of truth다. 상태는
 모든 변경마다 `version`이 증가한다. 클라이언트는 더 큰 version만 적용한다.
 
 - `GET /api/match/tickets/active`: 현재 사용자의 최신 ticket snapshot 조회
-- `POST /api/match/tickets`: ticket 생성 후 전체 snapshot 반환
+- `POST /api/match/tickets`: ticket 생성 후 전체 snapshot 반환. 본문은 `{"deckMode": "SELECTED|RANDOM", "serverPings": [{"serverId": 1, "rttMs": 42}]}`이고 둘 다 생략 가능하다.
+- `GET /api/match/servers`: 핑을 잴 수 있는 게임 서버 `[{"serverId", "url"}]`. 클라이언트는 각 `url`의 `/healthcheck` 왕복 시간을 재서 `serverPings`로 보낸다.
+
+**게임 서버 선택:** PVP 매치가 성사되면 두 유저가 보고한 핑 중 **큰 값(최대 핑)이 가장 낮은 서버**부터
+세션 생성을 시도하고, 거절되면 다음 순서로 넘어간다. 한 유저라도 어떤 서버의 핑을 보고하지 않았으면 그 서버는
+측정된 서버보다 뒤로 밀린다. 핑이 전혀 없으면(봇/PVE 포함) 기존 발견 순서를 따른다.
+음수이거나 10초를 넘는 값은 버린다.
 - `DELETE /api/match/tickets/{ticketId}`: 사용자 활성 ticket과 ID가 일치할 때만 취소
 - `GET /api/match/events`: best-effort SSE 상태 변경 알림
 - `DELETE /api/match/queue/me`: `CANCELED`, `TOO_LATE`, `ALREADY_FINISHED`, `NOT_FOUND` 결과 반환

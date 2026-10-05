@@ -2,6 +2,7 @@ package com.wordonline.matching.matching.controller
 
 import com.wordonline.matching.auth.service.UserId
 import com.wordonline.matching.matching.config.MatchEventStreamProperties
+import com.wordonline.matching.matching.dto.GameServerEndpointDto
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.CancelMatchResponseDto
 import com.wordonline.matching.matching.dto.MatchTicketRequest
@@ -49,8 +50,16 @@ class MatchingController(
         @UserId userId: Long?,
         @RequestBody(required = false) request: MatchTicketRequest?,
     ): MatchTicketResponse = MatchTicketResponse.from(
-        gameMatchService.createTicket(userId!!, request?.deckMode ?: MatchTicketRequest().deckMode),
+        gameMatchService.createTicket(
+            userId!!,
+            request?.deckMode ?: MatchTicketRequest().deckMode,
+            request?.serverPings,
+        ),
     )
+
+    /** Servers the client should ping and report back in [MatchTicketRequest.serverPings]. */
+    @GetMapping("/api/match/servers")
+    fun getPingTargets(): List<GameServerEndpointDto> = gameMatchService.getPingTargets()
 
     @GetMapping("/api/match/queue/me/exist")
     suspend fun isMeInQueue(@UserId userId: Long?): ResponseEntity<Unit> {
