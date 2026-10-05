@@ -53,11 +53,11 @@ class GameMatchService(
     }
     private val scope = CoroutineScope(Dispatchers.Default + exceptionHandler)
 
-    suspend fun matchPractice(userId: Long): MatchedInfoDto {
+    suspend fun matchPractice(userId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
         val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
         val botId = practiceOpponentFor(userId)
         val sessionDto = SessionDto.Practice(sessionId, userId, botId)
-        return legacyGameMatchService.createSession(sessionDto).matchInfo
+        return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
     }
 
     // A player who still carries the novice mark is finishing the tutorial, and meets the opponent
@@ -85,10 +85,10 @@ class GameMatchService(
         return legacyGameMatchService.createSession(sessionDto).matchInfo
     }
 
-    suspend fun matchPVE(userId: Long, scenarioId: Long): MatchedInfoDto {
+    suspend fun matchPVE(userId: Long, scenarioId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
         val sessionId = "pve-${matchingQueueRepository.nextSessionId().awaitSingle()}"
         val sessionDto = SessionDto.PVE(sessionId, userId, scenarioId)
-        return legacyGameMatchService.createSession(sessionDto).matchInfo
+        return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
     }
 
     suspend fun match(userId: Long): SimpleMessageDto {

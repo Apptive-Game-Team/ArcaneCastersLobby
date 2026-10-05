@@ -35,4 +35,19 @@ object GameServerPingSelector {
     /** Drops negative and absurd values so one bad report cannot skew or pin a server's score. */
     fun sanitize(pings: Map<Long, Long>?): Map<Long, Long>? =
         pings?.filterValues { it in 0..MAX_PING_MS }?.takeIf { it.isNotEmpty() }
+
+    /**
+     * Parses the `pings` query parameter of the body-less GET flows (practice, PVE):
+     * `serverId:rttMs` pairs joined by commas, e.g. `1:42,2:80`. Malformed pairs are skipped
+     * rather than failing the request, since a bad ping report must never block a match.
+     */
+    fun parse(raw: String?): Map<Long, Long>? =
+        sanitize(
+            raw?.split(',')
+                ?.mapNotNull { pair ->
+                    val (id, rtt) = pair.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+                    (id.trim().toLongOrNull() ?: return@mapNotNull null) to (rtt.trim().toLongOrNull() ?: return@mapNotNull null)
+                }
+                ?.toMap(),
+        )
 }

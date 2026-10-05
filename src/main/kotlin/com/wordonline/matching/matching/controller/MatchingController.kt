@@ -10,6 +10,7 @@ import com.wordonline.matching.matching.dto.MatchTicketResponse
 import com.wordonline.matching.matching.dto.QueueLengthResponseDto
 import com.wordonline.matching.matching.dto.SimpleMessageDto
 import com.wordonline.matching.matching.service.GameMatchService
+import com.wordonline.matching.server.service.GameServerPingSelector
 import com.wordonline.matching.matching.service.SessionLostReportService
 import com.wordonline.matching.matching.domain.SessionLostReport
 import kotlinx.coroutines.delay
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.bind.annotation.RequestBody
 
@@ -36,8 +38,11 @@ class MatchingController(
     private val matchEventStreamProperties: MatchEventStreamProperties,
 ) {
     @GetMapping("/api/match/practice/me")
-    suspend fun matchPractice(@UserId userId: Long?): MatchedInfoDto {
-        return gameMatchService.matchPractice(userId!!)
+    suspend fun matchPractice(
+        @UserId userId: Long?,
+        @RequestParam(required = false) pings: String?,
+    ): MatchedInfoDto {
+        return gameMatchService.matchPractice(userId!!, GameServerPingSelector.parse(pings))
     }
 
     @GetMapping("/api/match/queue/me")

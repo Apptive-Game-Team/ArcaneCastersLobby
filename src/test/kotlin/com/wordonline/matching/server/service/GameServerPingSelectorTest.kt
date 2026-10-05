@@ -51,4 +51,12 @@ class GameServerPingSelectorTest {
         assertThat(sanitized).containsExactlyEntriesOf(mapOf(2L to 50L))
         assertThat(GameServerPingSelector.sanitize(mapOf(1L to -1L))).isNull()
     }
+
+    @Test
+    fun `pings 쿼리 문자열을 파싱하고 깨진 항목은 건너뛴다`() {
+        assertThat(GameServerPingSelector.parse("1:42, 2:80,x:1,3,4:abc,5:-3"))
+            .containsExactlyInAnyOrderEntriesOf(mapOf(1L to 42L, 2L to 80L))
+        assertThat(GameServerPingSelector.parse(null)).isNull()
+        assertThat(GameServerPingSelector.parse("")).isNull()
+    }
 }

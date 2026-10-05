@@ -145,6 +145,10 @@ Redis `MatchTicket`이 매칭 상태의 source of truth다. 상태는
 세션 생성을 시도하고, 거절되면 다음 순서로 넘어간다. 한 유저라도 어떤 서버의 핑을 보고하지 않았으면 그 서버는
 측정된 서버보다 뒤로 밀린다. 핑이 전혀 없으면(봇/PVE 포함) 기존 발견 순서를 따른다.
 음수이거나 10초를 넘는 값은 버린다.
+
+본문이 없는 봇전(`GET /api/match/practice/me`)과 모험(`GET /api/scenarios/{scenarioId}/play`)도
+선택 쿼리 `pings=1:42,2:80`(`serverId:rttMs`를 쉼표로 연결)을 받아 그 유저의 핑이 낮은 서버를 먼저 쓴다.
+형식이 깨진 항목은 건너뛰고, 생략하면 기존 순서를 따른다.
 - `DELETE /api/match/tickets/{ticketId}`: 사용자 활성 ticket과 ID가 일치할 때만 취소
 - `GET /api/match/events`: best-effort SSE 상태 변경 알림
 - `DELETE /api/match/queue/me`: `CANCELED`, `TOO_LATE`, `ALREADY_FINISHED`, `NOT_FOUND` 결과 반환
