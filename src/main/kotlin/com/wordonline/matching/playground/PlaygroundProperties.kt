@@ -5,6 +5,6 @@ import java.time.Duration
 
 @ConfigurationProperties(prefix = "playground")
 data class PlaygroundProperties(
-    val enabled: Boolean = false,
+    val enabled: Boolean = true,
     val requestTimeout: Duration = Duration.ofSeconds(5),
 )

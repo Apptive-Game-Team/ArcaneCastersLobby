@@ -94,6 +94,6 @@ gameserver:
   # One success restores it immediately.
   failure-threshold: ${GAMESERVER_FAILURE_THRESHOLD:3}
 
-# Explicit development opt-in; disabled on ordinary servers.
+# Administrator playground enabled by default; false removes its routes.
 playground:
-  enabled: ${PLAYGROUND_ENABLED:false}
+  enabled: ${PLAYGROUND_ENABLED:true}

@@ -13,7 +13,7 @@ import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 
 @Service
-@ConditionalOnProperty(name = ["playground.enabled"], havingValue = "true")
+@ConditionalOnProperty(name = ["playground.enabled"], havingValue = "true", matchIfMissing = true)
 class PlaygroundService(
     private val servers: GameServerManagementService,
     private val builder: WebClient.Builder,
@@ -25,7 +25,7 @@ class PlaygroundService(
         if (ownerId <= 0) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid developer.")
         for (server in servers.getAvailableServers()) {
             try {
-                // Only an explicitly enabled game server exposes this route. Its ready
+                // An enabled game server exposes this route. Its ready
                 // response supplies public connection URLs even when we call an internal URL.
                 val ready = withTimeoutOrNull(properties.requestTimeout.toMillis()) {
                     builder.clone().baseUrl(servers.callUrl(server)).build()

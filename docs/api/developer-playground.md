@@ -1,7 +1,9 @@
 # Development magic playground
 
-Set PLAYGROUND_ENABLED=true on both development lobby and game servers.
-Default false leaves the route unregistered. Administrator user tokens can
+The administrator playground is enabled by default on lobby and game servers.
+Set PLAYGROUND_ENABLED=false (or playground.enabled=false) to disable it.
+Sessions are created only on request; administrator and owner checks still apply.
+Explicit false leaves the route and creation service unregistered. Administrator user tokens can
 POST /api/dev/playgrounds without a request body. Owner identity is taken from
 the authenticated memberId; it cannot be specified by the client.
 

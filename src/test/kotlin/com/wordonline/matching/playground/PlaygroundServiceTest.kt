@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.reactive.function.client.ClientResponse
@@ -38,12 +40,29 @@ class PlaygroundServiceTest {
         return PlaygroundService(servers, builder, PlaygroundProperties(enabled = true))
     }
 
-    @Test fun disabledFeatureRegistersNoRoutesOrSessionService() {
-        ApplicationContextRunner().withUserConfiguration(PlaygroundController::class.java, PlaygroundService::class.java)
-            .run { context ->
-                assertThat(context).hasNotFailed().doesNotHaveBean(PlaygroundController::class.java)
-                    .doesNotHaveBean(PlaygroundService::class.java)
-            }
+    private fun featureRunner() = ApplicationContextRunner()
+        .withUserConfiguration(PlaygroundController::class.java, PlaygroundService::class.java, PropertyBinding::class.java)
+        .withBean(GameServerManagementService::class.java, java.util.function.Supplier { servers })
+        .withBean(WebClient.Builder::class.java, java.util.function.Supplier { WebClient.builder() })
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableConfigurationProperties(PlaygroundProperties::class)
+    class PropertyBinding
+
+    @Test fun featureIsEnabledWithoutSettings() {
+        featureRunner().run { context ->
+            assertThat(context).hasNotFailed().hasSingleBean(PlaygroundController::class.java)
+                .hasSingleBean(PlaygroundService::class.java)
+            assertThat(context.getBean(PlaygroundProperties::class.java).enabled).isTrue()
+        }
+    }
+
+    @Test fun explicitFalseRegistersNoRoutesOrSessionService() {
+        featureRunner().withPropertyValues("playground.enabled=false").run { context ->
+            assertThat(context).hasNotFailed().doesNotHaveBean(PlaygroundController::class.java)
+                .doesNotHaveBean(PlaygroundService::class.java)
+            assertThat(context.getBean(PlaygroundProperties::class.java).enabled).isFalse()
+        }
     }
 
     @Test fun skipsUnsupportedServersAndReturnsTheAcceptingServerWithoutOrdinaryMatchDependencies() = runTest {

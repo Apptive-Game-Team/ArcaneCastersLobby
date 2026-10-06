@@ -11,7 +11,7 @@ import org.springframework.web.server.ResponseStatusException
 
 @RestController
 @RequestMapping("/api/dev/playgrounds")
-@ConditionalOnProperty(name = ["playground.enabled"], havingValue = "true")
+@ConditionalOnProperty(name = ["playground.enabled"], havingValue = "true", matchIfMissing = true)
 @PreAuthorize("hasAnyAuthority('SUPER_ADMIN', 'WORDONLINE_ADMIN')")
 class PlaygroundController(private val service: PlaygroundService) {
     @PostMapping
