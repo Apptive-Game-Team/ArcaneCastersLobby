@@ -37,6 +37,22 @@ class AccountClient(
 
     suspend fun getMemberSuspend(memberId: Long): AccountMemberResponseDto = getMember(memberId).awaitSingle()
 
+    fun searchMembers(query: String, limit: Int = 20): reactor.core.publisher.Flux<AccountMemberResponseDto> {
+        if (query.isBlank()) return reactor.core.publisher.Flux.empty()
+
+        return webClient.get().uri { builder ->
+            builder.path("/api/members/search")
+                .queryParam("query", query)
+                .queryParam("limit", limit)
+                .build()
+        }
+            .retrieve()
+            .bodyToFlux(AccountMemberResponseDto::class.java)
+    }
+
+    suspend fun searchMembersSuspend(query: String, limit: Int = 20): List<AccountMemberResponseDto> =
+        searchMembers(query, limit).collectList().awaitSingle()
+
     private fun getException(): Mono<Throwable> = Mono.deferContextual { ctx ->
         val localeContext = ctx.get(LocaleContext::class.java)
         Mono.error(IllegalArgumentException(localizationService.getMessage(localeContext, "error.member.not.found")))
