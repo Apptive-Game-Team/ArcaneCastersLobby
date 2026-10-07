@@ -89,6 +89,7 @@ class LegacyGameMatchService(
                 rightUser,
                 sessionDto.sessionId,
                 ready.webSocketUrl,
+                ready.mapType,
             )
             sessionRecoveryStore.storeMatchInfo(matchedInfo).awaitSingleOrNull()
             return SessionPlacement(matchedInfo, server.id, ready.instanceId)

@@ -9,7 +9,8 @@ public record SessionRecoveryInfo(
         long rightUserId,
         String sessionId,
         String serverUrl,
-        long expireAt
+        long expireAt,
+        String mapType
 ) {
 
     private final static long TTL = 5 * 60 * 1000;
@@ -20,7 +21,8 @@ public record SessionRecoveryInfo(
                 matchedInfoDto.getRightUser().id(),
                 matchedInfoDto.getSessionId(),
                 matchedInfoDto.getServer(),
-                System.currentTimeMillis() + TTL
+                System.currentTimeMillis() + TTL,
+                matchedInfoDto.getMapType()
         );
     }
 
