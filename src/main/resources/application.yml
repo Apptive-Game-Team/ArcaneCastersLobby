@@ -18,6 +18,9 @@ management:
 spring:
   application:
     name: word-online-matching
+  threads:
+    virtual:
+      enabled: ${VIRTUAL_THREADS_ENABLED:true}
   config:
     import: optional:file:.env[.properties]
   data:
