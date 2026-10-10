@@ -81,6 +81,10 @@ Confirm both landed with `gh issue view <n> --json assignees,labels` after creat
 
 ## Security & Configuration Tips
 
+Follow [magic-previews.md](docs/api/magic-previews.md) when changing preview downloads.
+Pin every recording to the catalog's managed server ID and revision; never retry it
+against another server, and enable gzip decoding before verifying the content hash.
+
 Do not commit secrets or local `.env` values. JWT keys, database credentials,
 Redis settings, and account server URLs must remain environment-driven.
 Database schema, seed, and operational data changes belong in
