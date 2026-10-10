@@ -37,4 +37,9 @@ data class SessionReadyResponse(
      * liveness from the session query alone.
      */
     val instanceId: String? = null,
+    /**
+     * Map kind the game server chose for this session (for example `GRASSLAND`). A plain string,
+     * not an enum, so a kind added later passes through. `null` when the game server predates it.
+     */
+    val mapType: String? = null,
 )

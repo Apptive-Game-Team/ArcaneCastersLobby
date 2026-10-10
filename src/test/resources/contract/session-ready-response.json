@@ -4,5 +4,6 @@
   "ready": true,
   "serverUrl": "http://localhost:7777",
   "webSocketUrl": "http://localhost:7777/ws",
-  "instanceId": "00000000-0000-0000-0000-000000000001"
+  "instanceId": "00000000-0000-0000-0000-000000000001",
+  "mapType": "GRASSLAND"
 }
