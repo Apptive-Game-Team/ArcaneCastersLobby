@@ -81,6 +81,10 @@ Confirm both landed with `gh issue view <n> --json assignees,labels` after creat
 
 ## Security & Configuration Tips
 
+Read [developer-playground.md](docs/api/developer-playground.md) before changing
+developer session creation. It must not use ordinary createSession or write
+SessionRecoveryStore; doing so overwrites the developer's ordinary match recovery.
+
 Do not commit secrets or local `.env` values. JWT keys, database credentials,
 Redis settings, and account server URLs must remain environment-driven.
 Database schema, seed, and operational data changes belong in
