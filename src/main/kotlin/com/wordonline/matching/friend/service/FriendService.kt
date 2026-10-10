@@ -59,7 +59,7 @@ class FriendService(
         return members.mapNotNull { member ->
             val memberId = member.id ?: return@mapNotNull null
             if (memberId == userId || memberId < 0) return@mapNotNull null
-            val isFriend = friendRepository.areFriends(userId, memberId)
+            val isFriend = friendRepository.existsByUserIdAndFriendId(userId, memberId)
             val pending = friendRequestRepository.findPendingBetween(userId, memberId) != null
             FriendSearchResultDto(
                 userId = memberId,
@@ -81,7 +81,7 @@ class FriendService(
             throw IllegalArgumentException("Cannot send friend request to yourself")
         }
 
-        if (friendRepository.areFriends(senderId, targetId)) {
+        if (friendRepository.existsByUserIdAndFriendId(senderId, targetId)) {
             throw IllegalStateException("Already friends with user: ${target.displayName}")
         }
 
