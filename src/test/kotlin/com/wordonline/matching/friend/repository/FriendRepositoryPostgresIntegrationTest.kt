@@ -2,6 +2,7 @@ package com.wordonline.matching.friend.repository
 
 import io.r2dbc.spi.ConnectionFactories
 import io.r2dbc.spi.ConnectionFactory
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
@@ -74,13 +75,13 @@ class FriendRepositoryPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("findFriendIdsByUserId 는 최근에 맺은 친구부터 id 를 읽는다")
-    fun findFriendIdsByUserIdReadsLongs() = runBlocking<Unit> {
+    @DisplayName("findAllByUserId 는 최근에 맺은 친구부터 Friendship 으로 읽는다")
+    fun findAllByUserIdReadsFriendships() = runBlocking<Unit> {
         friendRepository.insertFriendship(1L, 2L)
         databaseClient.sql("INSERT INTO friendships(user_id, friend_id, created_at) VALUES (1, 3, CURRENT_TIMESTAMP + INTERVAL '1 minute')")
             .fetch().rowsUpdated().awaitSingle()
 
-        assertThat(friendRepository.findFriendIdsByUserId(1L).toList()).containsExactly(3L, 2L)
+        assertThat(friendRepository.findAllByUserId(1L).map { it.friendId }.toList()).containsExactly(3L, 2L)
     }
 
     @Test

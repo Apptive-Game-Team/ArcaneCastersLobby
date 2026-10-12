@@ -33,7 +33,7 @@ class FriendService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     suspend fun getFriends(userId: Long): List<FriendSummaryDto> {
-        val friendIds = friendRepository.findFriendIdsByUserId(userId).toList()
+        val friendIds = friendRepository.findAllByUserId(userId).map { it.friendId }.toList()
         return friendIds.mapNotNull { friendId ->
             try {
                 val member = accountClient.getMemberSuspend(friendId)
