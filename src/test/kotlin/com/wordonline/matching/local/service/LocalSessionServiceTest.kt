@@ -202,10 +202,18 @@ class LocalSessionServiceTest {
     }
 
     @Test
-    fun `frame 시간과 보고 시간이 10퍼센트 넘게 다르면 FRAME_DURATION_MISMATCH 다`() = runBlocking<Unit> {
+    fun `frame 시간이 보고 시간보다 10퍼센트 넘게 길면 FRAME_DURATION_MISMATCH 다`() = runBlocking<Unit> {
         givenSession(session())
 
-        assertThat(service().report(userId, "local-1", win(frameCount = 7_000))).isEqualTo(rejected("FRAME_DURATION_MISMATCH"))
+        assertThat(service().report(userId, "local-1", win(frameCount = 11_000))).isEqualTo(rejected("FRAME_DURATION_MISMATCH"))
+    }
+
+    @Test
+    fun `느린 PC 라서 frame 이 모자란 결과는 받아들인다`() = runBlocking<Unit> {
+        givenSession(session())
+
+        // 154 s at a 60 tick target is 9_240 frames; 7_000 is a loop that averaged about 45 FPS.
+        assertThat(service().report(userId, "local-1", win(frameCount = 7_000))).isEqualTo(accepted)
     }
 
     @Test

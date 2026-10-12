@@ -6,7 +6,6 @@ import com.wordonline.matching.local.domain.LocalSessionRecord
 import com.wordonline.matching.local.repository.StatisticCount
 import java.time.Duration
 import java.time.Instant
-import kotlin.math.abs
 
 /** A result body that passed the shape checks; only the plausibility checks are left. */
 data class ValidLocalResult(
@@ -28,7 +27,7 @@ data class ValidLocalResult(
  */
 object LocalResultChecks {
 
-    /** Largest allowed gap between the frame time and the reported time, as a share of the latter. */
+    /** How far the frame time may run ahead of the reported time, as a share of the latter. */
     const val FRAME_DURATION_TOLERANCE = 0.10
 
     fun firstFailure(
@@ -50,7 +49,9 @@ object LocalResultChecks {
         if (result.tickRate <= 0) return true
         val frameSeconds = result.frameCount.toDouble() / result.tickRate
         val reportedSeconds = result.durationMillis / 1000.0
-        return abs(frameSeconds - reportedSeconds) > reportedSeconds * FRAME_DURATION_TOLERANCE
+        // One-sided: a slow PC runs fewer frames than the tick rate promises, which is lag, not a
+        // gain. Only more frames than the reported time allows means the simulation ran fast.
+        return frameSeconds - reportedSeconds > reportedSeconds * FRAME_DURATION_TOLERANCE
     }
 
     // Beyond the winner and loser, every deck and magic row must belong to one of the two
