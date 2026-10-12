@@ -95,6 +95,7 @@ public class WebSecurityConfig {
                                 .pathMatchers(
                                         "/api/deploy/status",
                                         "/api/public/**",
+                                        "/api/offline-pack",
                                         "/healthcheck").permitAll()
                                 .anyExchange().authenticated()
                 );
