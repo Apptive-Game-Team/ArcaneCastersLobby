@@ -2,6 +2,7 @@ package com.wordonline.matching.matching.controller
 
 import com.wordonline.matching.auth.service.UserId
 import com.wordonline.matching.matching.config.MatchEventStreamProperties
+import com.wordonline.matching.matching.dto.GameServerEndpointDto
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.CancelMatchResponseDto
 import com.wordonline.matching.matching.dto.MatchTicketRequest
@@ -9,6 +10,7 @@ import com.wordonline.matching.matching.dto.MatchTicketResponse
 import com.wordonline.matching.matching.dto.QueueLengthResponseDto
 import com.wordonline.matching.matching.dto.SimpleMessageDto
 import com.wordonline.matching.matching.service.GameMatchService
+import com.wordonline.matching.server.service.GameServerPingSelector
 import com.wordonline.matching.matching.service.SessionLostReportService
 import com.wordonline.matching.matching.domain.SessionLostReport
 import kotlinx.coroutines.delay
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.bind.annotation.RequestBody
 
@@ -35,8 +38,11 @@ class MatchingController(
     private val matchEventStreamProperties: MatchEventStreamProperties,
 ) {
     @GetMapping("/api/match/practice/me")
-    suspend fun matchPractice(@UserId userId: Long?): MatchedInfoDto {
-        return gameMatchService.matchPractice(userId!!)
+    suspend fun matchPractice(
+        @UserId userId: Long?,
+        @RequestParam(required = false) pings: String?,
+    ): MatchedInfoDto {
+        return gameMatchService.matchPractice(userId!!, GameServerPingSelector.parse(pings))
     }
 
     @GetMapping("/api/match/queue/me")
@@ -49,8 +55,16 @@ class MatchingController(
         @UserId userId: Long?,
         @RequestBody(required = false) request: MatchTicketRequest?,
     ): MatchTicketResponse = MatchTicketResponse.from(
-        gameMatchService.createTicket(userId!!, request?.deckMode ?: MatchTicketRequest().deckMode),
+        gameMatchService.createTicket(
+            userId!!,
+            request?.deckMode ?: MatchTicketRequest().deckMode,
+            request?.serverPings,
+        ),
     )
+
+    /** Servers the client should ping and report back in [MatchTicketRequest.serverPings]. */
+    @GetMapping("/api/match/servers")
+    fun getPingTargets(): List<GameServerEndpointDto> = gameMatchService.getPingTargets()
 
     @GetMapping("/api/match/queue/me/exist")
     suspend fun isMeInQueue(@UserId userId: Long?): ResponseEntity<Unit> {

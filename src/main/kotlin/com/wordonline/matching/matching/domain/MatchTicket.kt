@@ -44,6 +44,8 @@ data class MatchTicket(
     val serverInstanceId: String? = null,
     /** The immutable deck snapshot sent to the game server when this ticket is paired. */
     val deckCardIds: List<Long>? = null,
+    /** Client-measured ping in ms to each game server (`servers.id` -> ms), used to pick the host. */
+    val serverPings: Map<Long, Long>? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {

@@ -31,6 +31,7 @@ class MatchTicketSerializationTest {
                 rightUser = UserDetailResponseDto(2L, "right", "right@example.com"),
                 sessionId = "session-1",
                 webSocketUrl = "http://localhost:7777/ws",
+                mapType = "FORTRESS",
             ),
             attemptId = "attempt-1",
             serverId = 7L,
@@ -49,6 +50,7 @@ class MatchTicketSerializationTest {
         assertThat(decoded.serverInstanceId)
             .`as`("호스트 재시작 판별의 유일한 근거이므로 왕복에서 사라지면 안 된다")
             .isEqualTo("boot-1")
+        assertThat(decoded.matchInfo?.mapType).isEqualTo("FORTRESS")
         assertThat(decoded.serverId).isEqualTo(7L)
         assertThat(decoded.deckCardIds).isEqualTo(ticket.deckCardIds)
     }
@@ -96,5 +98,34 @@ class MatchTicketSerializationTest {
 
         assertThat(decoded).isEqualTo(ticket)
         assertThat(decoded.matchInfo).isNull()
+    }
+
+    @Test
+    fun `ticket json written without mapType still decodes and the client sees null`() {
+        val ticket = MatchTicket(
+            ticketId = "ticket-4",
+            userId = 1L,
+            mmr = 1200L,
+            state = MatchTicketState.MATCHED,
+            version = 3L,
+            matchInfo = MatchedInfoDto(
+                message = "Successfully Matched",
+                server = "http://localhost:7777",
+                leftUser = UserDetailResponseDto(1L, "left", "left@example.com"),
+                rightUser = UserDetailResponseDto(2L, "right", "right@example.com"),
+                sessionId = "session-1",
+            ),
+            createdAt = Instant.parse("2026-08-10T00:00:00Z"),
+            updatedAt = Instant.parse("2026-08-10T00:00:05Z"),
+        )
+        val tree = objectMapper.readTree(objectMapper.writeValueAsString(ticket))
+        (tree.get("matchInfo") as com.fasterxml.jackson.databind.node.ObjectNode).remove("mapType")
+
+        val decoded = objectMapper.readValue(tree.toString(), MatchTicket::class.java)
+        val sent = objectMapper.readTree(objectMapper.writeValueAsString(decoded.matchInfo))
+
+        assertThat(decoded.matchInfo?.mapType).isNull()
+        assertThat(sent.has("mapType")).isTrue()
+        assertThat(sent.get("mapType").isNull).isTrue()
     }
 }
