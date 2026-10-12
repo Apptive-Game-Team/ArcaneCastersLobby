@@ -13,8 +13,7 @@ interface FriendRepository : CoroutineCrudRepository<Friendship, Long> {
     @Query("SELECT friend_id FROM friendships WHERE user_id = :userId ORDER BY created_at DESC")
     fun findFriendIdsByUserId(userId: Long): Flow<Long>
 
-    @Query("SELECT COUNT(*) > 0 FROM friendships WHERE user_id = :userId AND friend_id = :friendId")
-    suspend fun areFriends(userId: Long, friendId: Long): Boolean
+    suspend fun existsByUserIdAndFriendId(userId: Long, friendId: Long): Boolean
 
     @Modifying
     @Query("INSERT INTO friendships (user_id, friend_id, created_at) VALUES (:userId, :friendId, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING")

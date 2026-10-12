@@ -32,7 +32,7 @@ class FriendInviteService(
     private val invites = ConcurrentHashMap<String, FriendInvite>()
 
     suspend fun invite(inviterId: Long, friendId: Long): FriendInviteDto {
-        if (!friendRepository.areFriends(inviterId, friendId)) {
+        if (!friendRepository.existsByUserIdAndFriendId(inviterId, friendId)) {
             throw IllegalStateException("User $friendId is not your friend")
         }
 
