@@ -58,7 +58,7 @@ Body: `outcome` (`WIN`, `DRAW`, `ABANDONED`), `winUserId`, `lossUserId`, `durati
 |---|---|
 | `WRONG_USER` | the caller is not the session's user (the session stays open) |
 | `DURATION_EXCEEDS_WALL_CLOCK` | less time passed since issue than `durationMillis` |
-| `FRAME_DURATION_MISMATCH` | `frameCount / tickRate` differs from `durationMillis / 1000` by more than 10%, or `tickRate <= 0` |
+| `FRAME_DURATION_MISMATCH` | `frameCount / tickRate` exceeds `durationMillis / 1000` by more than 10%, or `tickRate <= 0`. Fewer frames (a slow PC) is accepted |
 | `TOO_SHORT` | a `WIN` shorter than `local-sessions.minimum-win-millis` (30000) |
 | `PARTICIPANT_MISMATCH` | winner and loser are not the two participants (both `null` unless `WIN`), or a `decks`/`magics` row names someone else |
 | `DAILY_LIMIT` | the user already has `local-sessions.daily-result-limit` (100) accepted results this UTC day |
