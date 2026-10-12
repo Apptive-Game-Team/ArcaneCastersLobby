@@ -36,7 +36,7 @@ import java.util.UUID
 
 @Service
 class GameMatchService(
-    private val botMemberMaker: BotMemberMaker,
+    private val practiceOpponentSelector: PracticeOpponentSelector,
     private val legacyGameMatchService: LegacyGameMatchService,
     private val userService: UserService,
     private val deckService: DeckService,
@@ -55,28 +55,9 @@ class GameMatchService(
 
     suspend fun matchPractice(userId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
         val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-        val botId = practiceOpponentFor(userId)
+        val botId = practiceOpponentSelector.select(userId).botId
         val sessionDto = SessionDto.Practice(sessionId, userId, botId)
         return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
-    }
-
-    // A player who still carries the novice mark is finishing the tutorial, and meets the opponent
-    // built to lose. The fallback matters: the tutorial opponent being unavailable must not be the
-    // reason a new player cannot start a match at all, so they get an ordinary bot and keep the
-    // mark for next time. Everyone else meets a bot near their own MMR.
-    private suspend fun practiceOpponentFor(userId: Long): Long {
-        if (!userService.isNovice(userId).awaitSingle()) {
-            return botMemberMaker.getPracticeBotIdNear(userService.getMmr(userId).awaitSingle())
-        }
-
-        return try {
-            botMemberMaker.getHospitalityBotId().awaitSingle()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            log.warn("No hospitality bot available for novice userId={}; falling back to the bot pool", userId, e)
-            botMemberMaker.getPracticeBotIdNear(userService.getMmr(userId).awaitSingle())
-        }
     }
 
     suspend fun matchBots(leftBotId: Long, rightBotId: Long): MatchedInfoDto {
