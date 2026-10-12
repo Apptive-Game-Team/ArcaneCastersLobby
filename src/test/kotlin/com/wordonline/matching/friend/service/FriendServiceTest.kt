@@ -4,6 +4,7 @@ import com.wordonline.matching.auth.domain.UserStatus
 import com.wordonline.matching.auth.service.UserService
 import com.wordonline.matching.friend.domain.FriendRequest
 import com.wordonline.matching.friend.domain.FriendRequestStatus
+import com.wordonline.matching.friend.domain.Friendship
 import com.wordonline.matching.friend.repository.FriendRepository
 import com.wordonline.matching.friend.repository.FriendRequestRepository
 import com.wordonline.matching.matching.client.AccountClient
@@ -45,7 +46,7 @@ class FriendServiceTest {
         val userId = 1L
         val friendId = 2L
 
-        whenever(friendRepository.findFriendIdsByUserId(userId)).thenReturn(listOf(friendId).asFlow())
+        whenever(friendRepository.findAllByUserId(userId)).thenReturn(listOf(Friendship(userId, friendId)).asFlow())
         whenever(accountClient.getMemberSuspend(friendId)).thenReturn(
             AccountMemberResponseDto(email = "friend@example.com", name = "FriendUser", id = friendId)
         )
