@@ -24,13 +24,17 @@ data class SessionDto(
         fun Practice(sessionId: String, uid1: Long, uid2: Long) =
             SessionDto(sessionId, uid1, uid2, SessionType.Practice, null)
 
+        /**
+         * A pair from the matching queue. Any bot side makes it `Practice`: the game server
+         * creates bot agents only for `Practice`, and updates MMR for it, bot vs bot included.
+         */
         fun from(
             sessionId: String,
             uid1: Long,
             uid2: Long,
             leftDeckCardIds: List<Long>? = null,
             rightDeckCardIds: List<Long>? = null,
-        ) = if (uid2 < 0) Practice(sessionId, uid1, uid2)
+        ) = if (uid1 < 0 || uid2 < 0) Practice(sessionId, uid1, uid2)
         else PVP(sessionId, uid1, uid2, leftDeckCardIds, rightDeckCardIds)
     }
 }

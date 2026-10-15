@@ -5,6 +5,7 @@ import com.wordonline.matching.auth.service.UserService
 import com.wordonline.matching.global.service.LocalizationService
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.SessionDto
+import com.wordonline.matching.matching.service.BotSessionPlacement
 import com.wordonline.matching.server.entity.Server
 import com.wordonline.matching.server.exception.GameServerUnreachableException
 import com.wordonline.matching.server.exception.NoAvailableGameServerException
@@ -39,6 +40,7 @@ class LegacyGameMatchService(
     private val localizationService: LocalizationService,
     private val userService: UserService,
     private val gameServerManagementService: GameServerManagementService,
+    private val botSessionPlacement: BotSessionPlacement,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -47,6 +49,8 @@ class LegacyGameMatchService(
      *
      * Candidates are ordered by the highest ping any participant reported to them, lowest first
      * (see [GameServerPingSelector]); without reported pings the discovery order is kept.
+     * A bot-vs-bot session has no pings and goes to the server with the most spare bot
+     * capacity instead (see [BotSessionPlacement]).
      * They are tried in that order and a refusal is not fatal: a game server that has
      * already flipped itself out of `ACTIVE` answers `false`, and a redeploying one drops
      * the connection. Both used to fail the whole match even when another healthy server
@@ -63,10 +67,12 @@ class LegacyGameMatchService(
         attemptId: String = UUID.randomUUID().toString(),
         participantPings: List<Map<Long, Long>> = emptyList(),
     ): SessionPlacement {
-        val candidates = GameServerPingSelector.order(
-            gameServerManagementService.getAvailableServers(),
-            participantPings,
-        )
+        val available = gameServerManagementService.getAvailableServers()
+        val candidates = if (isBotOnly(sessionDto)) {
+            botSessionPlacement.order(available)
+        } else {
+            GameServerPingSelector.order(available, participantPings)
+        }
         if (candidates.isEmpty()) {
             throw NoAvailableGameServerException(localizedMessage("error.gameserver.unavailable"))
         }
@@ -202,6 +208,10 @@ class LegacyGameMatchService(
             log.warn("Host {} did not answer for session {}: {}", serverUrl, sessionId, e.toString())
             throw GameServerUnreachableException(localizedMessage("error.gameserver.unreachable"), e)
         }
+
+    /** Both sides are bots: a bot-vs-bot game, which no participant's ping can place. */
+    private fun isBotOnly(sessionDto: SessionDto): Boolean =
+        sessionDto.uid1 < 0 && (sessionDto.uid2 ?: 0L) < 0
 
     private suspend fun userDetails(
         userId1: Long,

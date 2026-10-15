@@ -4,6 +4,7 @@ import com.wordonline.matching.auth.dto.UserDetailResponseDto
 import com.wordonline.matching.auth.service.UserService
 import com.wordonline.matching.global.service.LocalizationService
 import com.wordonline.matching.matching.dto.SessionDto
+import com.wordonline.matching.matching.service.BotSessionPlacement
 import com.wordonline.matching.server.entity.Server
 import com.wordonline.matching.server.entity.ServerState
 import com.wordonline.matching.server.entity.ServerType
@@ -40,6 +41,7 @@ class LegacyGameMatchServiceTest {
     private val sessionRecoveryStore: SessionRecoveryStore = mock()
     private val localizationService: LocalizationService = mock()
     private val userService: UserService = mock()
+    private val botSessionPlacement: BotSessionPlacement = mock()
 
     /** Every request the service actually sent, so tests can assert which host was asked. */
     private val sentRequests = mutableListOf<ClientRequest>()
@@ -55,6 +57,7 @@ class LegacyGameMatchServiceTest {
             localizationService,
             userService,
             gameServerManagementService,
+            botSessionPlacement,
         )
     }
 
@@ -98,6 +101,22 @@ class LegacyGameMatchServiceTest {
         assertThat(sentRequests.map { it.url().host })
             .`as`("alpha의 최대 핑은 300, beta는 90이므로 beta가 먼저여야 한다")
             .containsExactly("beta")
+    }
+
+    @Test
+    fun `봇끼리 세션은 봇 자리가 남은 서버 순서로 요청한다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers())
+            .thenReturn(listOf(server(1L, "alpha"), server(2L, "beta")))
+        whenever(botSessionPlacement.order(any())).thenAnswer { it.getArgument<List<Server>>(0).reversed() }
+
+        service { readyResponse(true) }.createSession(
+            SessionDto.Practice("session-1", -1L, -2L),
+            "attempt-1",
+            listOf(emptyMap(), emptyMap()),
+        )
+
+        assertThat(sentRequests.map { it.url().host }).containsExactly("beta")
     }
 
     @Test
@@ -152,7 +171,7 @@ class LegacyGameMatchServiceTest {
             }
         }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, botSessionPlacement,
         )
 
         val matched = service.createSession(sessionDto, "attempt-1")
@@ -276,7 +295,7 @@ class LegacyGameMatchServiceTest {
             else Mono.just(readyResponse(true))
         }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, botSessionPlacement,
         )
 
         val matched = service.createSession(sessionDto, "attempt-1")
@@ -371,7 +390,7 @@ class LegacyGameMatchServiceTest {
 
         val builder = WebClient.builder().exchangeFunction { Mono.error(IllegalStateException("unreachable")) }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, botSessionPlacement,
         )
 
         val error = runCatching { service.getMatchInfo(1L) }.exceptionOrNull()

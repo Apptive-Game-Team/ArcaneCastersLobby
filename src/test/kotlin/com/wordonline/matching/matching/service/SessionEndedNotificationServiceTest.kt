@@ -209,6 +209,26 @@ class SessionEndedNotificationServiceTest {
         verify(userService, never()).markOnline(2L)
     }
 
+    @Test
+    fun `봇끼리 한 경기가 끝나면 두 봇 티켓을 함께 정리한다`() = runTest {
+        val botMatchInfo = matchInfo("session-1").copy(
+            leftUser = UserDetailResponseDto(-3L, "bot-left", "bot@theevilent.com"),
+            rightUser = UserDetailResponseDto(-4L, "bot-right", "bot@theevilent.com"),
+        )
+        seed(matchedTicket("ticket-b1", -3L).copy(matchInfo = botMatchInfo))
+        seed(matchedTicket("ticket-b2", -4L).copy(matchInfo = botMatchInfo))
+
+        service.sessionEnded("session-1", "boot-1")
+
+        assertThat(decoded("ticket-b1").state).isEqualTo(MatchTicketState.FAILED)
+        assertThat(decoded("ticket-b2").state)
+            .`as`("남은 봇 티켓이 MATCHED 로 남으면 feeder 가 그 봇을 다시 넣지 못한다")
+            .isEqualTo(MatchTicketState.FAILED)
+        assertThat(sandbox.get("matching:active:-3")).isNull()
+        assertThat(sandbox.get("matching:active:-4")).isNull()
+        assertThat(sandbox.zmembers(MatchTicketRepository.MATCHED_KEY)).isEmpty()
+    }
+
     private fun decoded(ticketId: String): MatchTicket =
         objectMapper.readValue(sandbox.get("matching:ticket:$ticketId"), MatchTicket::class.java)
 }
