@@ -82,6 +82,14 @@ matching:
     # Keep-alive cadence for the /api/match/events SSE stream. Must stay below the shortest
     # idle timeout of any proxy in front of this service.
     heartbeat-interval: ${MATCHING_EVENTS_HEARTBEAT_INTERVAL:15s}
+  # Bound to BotQueueProperties. Keeps bot tickets in the matching queue so bot-vs-bot games
+  # are created by the matching loop. Wanted bot games = sum over ACTIVE game servers of
+  # COALESCE(servers.target_bot_sessions, default-target-per-server).
+  bot-queue:
+    enabled: ${MATCHING_BOT_QUEUE_ENABLED:true}
+    interval: ${MATCHING_BOT_QUEUE_INTERVAL:10s}
+    default-target-per-server: ${MATCHING_BOT_QUEUE_DEFAULT_TARGET_PER_SERVER:1}
+    max-enqueue-per-tick: ${MATCHING_BOT_QUEUE_MAX_ENQUEUE_PER_TICK:4}
 
 # Bound to GameServerProperties.
 gameserver:

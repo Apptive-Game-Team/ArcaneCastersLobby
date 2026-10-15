@@ -50,7 +50,12 @@ data class MatchTicket(
     val updatedAt: Instant,
 ) {
     /**
-     * The other side of a PVP session, or `null` for bot/PVE sessions and unmatched tickets.
+     * The other side of a session that holds two tickets, or `null` for unmatched tickets and
+     * for sessions where the other side has no ticket.
+     *
+     * A human ticket's opponent is a human (PVP); a practice bot or PVE has no ticket. A bot
+     * ticket's opponent is the other bot of a lobby-matched bot-vs-bot game, which does hold a
+     * ticket and must be retired with it.
      *
      * `@JsonIgnore` because it is derived: without it the value would be written into the
      * redis payload and the client-facing ticket JSON as if it were stored state.
@@ -60,7 +65,7 @@ data class MatchTicket(
         get() {
             val info = matchInfo ?: return null
             val opponent = if (info.leftUser.id() == userId) info.rightUser.id() else info.leftUser.id()
-            return opponent.takeIf { it > 0 && it != userId }
+            return opponent.takeIf { it != userId && (it > 0 || userId < 0) }
         }
 }
 
