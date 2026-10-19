@@ -10,8 +10,8 @@ import org.springframework.stereotype.Repository
 @Repository
 interface FriendRepository : CoroutineCrudRepository<Friendship, Long> {
 
-    @Query("SELECT friend_id FROM friendships WHERE user_id = :userId ORDER BY created_at DESC")
-    fun findFriendIdsByUserId(userId: Long): Flow<Long>
+    @Query("SELECT * FROM friendships WHERE user_id = :userId ORDER BY created_at DESC")
+    fun findAllByUserId(userId: Long): Flow<Friendship>
 
     suspend fun existsByUserIdAndFriendId(userId: Long, friendId: Long): Boolean
 
