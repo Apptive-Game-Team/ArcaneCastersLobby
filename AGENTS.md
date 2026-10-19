@@ -85,6 +85,10 @@ Read [developer-playground.md](docs/api/developer-playground.md) before changing
 developer session creation. It must not use ordinary createSession or write
 SessionRecoveryStore; doing so overwrites the developer's ordinary match recovery.
 
+Follow [magic-previews.md](docs/api/magic-previews.md) when changing preview downloads.
+Pin every recording to the catalog's managed server ID and revision; never retry it
+against another server, and enable gzip decoding before verifying the content hash.
+
 Do not commit secrets or local `.env` values. JWT keys, database credentials,
 Redis settings, and account server URLs must remain environment-driven.
 Database schema, seed, and operational data changes belong in

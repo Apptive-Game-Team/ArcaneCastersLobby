@@ -180,6 +180,76 @@ class LegacyGameMatchServiceTest {
         assertThat(placement.serverInstanceId).isEqualTo("boot-1")
     }
 
+    private fun readyResponseWithMapType(mapJson: String): ClientResponse =
+        ClientResponse.create(HttpStatus.OK)
+            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+            .body("""{"attemptId":"attempt-1","sessionId":"session-1","ready":true,"serverUrl":"http://alpha:9090","webSocketUrl":"wss://alpha/ws"$mapJson}""")
+            .build()
+
+    @Test
+    fun `게임 서버 응답의 mapType이 matched info에 실린다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+
+        val placement = service { readyResponseWithMapType(""","mapType":"RIVER"""") }
+            .createSession(sessionDto, "attempt-1")
+
+        assertThat(placement.matchInfo.mapType).isEqualTo("RIVER")
+    }
+
+    @Test
+    fun `모르는 mapType 값도 검증하지 않고 그대로 넘긴다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+
+        val placement = service { readyResponseWithMapType(""","mapType":"VOLCANO"""") }
+            .createSession(sessionDto, "attempt-1")
+
+        assertThat(placement.matchInfo.mapType).isEqualTo("VOLCANO")
+    }
+
+    @Test
+    fun `mapType이 없는 구버전 게임 서버 응답은 matched info의 mapType이 null이다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+
+        val placement = service { readyResponseWithMapType("") }.createSession(sessionDto, "attempt-1")
+
+        assertThat(placement.matchInfo.sessionId).isEqualTo("session-1")
+        assertThat(placement.matchInfo.mapType).isNull()
+    }
+
+    @Test
+    fun `mapType을 복구 저장소에 넘기고 복구한 matched info에도 싣는다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+        val stored = org.mockito.kotlin.argumentCaptor<com.wordonline.matching.matching.dto.MatchedInfoDto>()
+
+        service { readyResponseWithMapType(""","mapType":"GATE"""") }.createSession(sessionDto, "attempt-1")
+
+        org.mockito.kotlin.verify(sessionRecoveryStore).storeMatchInfo(stored.capture())
+        assertThat(SessionRecoveryInfo(stored.firstValue).mapType()).isEqualTo("GATE")
+
+        whenever(sessionRecoveryStore.getSessionInfo(1L)).thenReturn(
+            Mono.just(SessionRecoveryInfo(1L, 2L, "session-1", "http://gamma:9090", Long.MAX_VALUE, "FOREST")),
+        )
+        val recovered = service { booleanResponse(true) }.getMatchInfo(1L)
+
+        assertThat(recovered.mapType).isEqualTo("FOREST")
+    }
+
+    @Test
+    fun `getMatchInfo는 mapType이 없는 복구 정보에서도 동작한다`() = runTest {
+        stubUsers()
+        whenever(sessionRecoveryStore.getSessionInfo(1L)).thenReturn(
+            Mono.just(SessionRecoveryInfo(1L, 2L, "session-1", "http://gamma:9090", Long.MAX_VALUE, null)),
+        )
+
+        val recovered = service { booleanResponse(true) }.getMatchInfo(1L)
+
+        assertThat(recovered.mapType).isNull()
+    }
+
     @Test
     fun `부팅 세대값을 보내지 않는 구버전 게임 서버도 배치에 성공한다`() = runTest {
         stubUsers()
@@ -274,7 +344,7 @@ class LegacyGameMatchServiceTest {
     fun `getMatchInfo는 세션을 호스팅하는 서버에 묻는다`() = runTest {
         stubUsers()
         whenever(sessionRecoveryStore.getSessionInfo(1L)).thenReturn(
-            Mono.just(SessionRecoveryInfo(1L, 2L, "session-1", "http://gamma:9090", Long.MAX_VALUE)),
+            Mono.just(SessionRecoveryInfo(1L, 2L, "session-1", "http://gamma:9090", Long.MAX_VALUE, null)),
         )
         // a different server is available; asking it instead is the bug under test
         whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
@@ -296,7 +366,7 @@ class LegacyGameMatchServiceTest {
     fun `호스팅 서버가 응답하지 않으면 세션 종료가 아니라 도달 불가로 구분한다`() = runTest {
         stubUsers()
         whenever(sessionRecoveryStore.getSessionInfo(1L)).thenReturn(
-            Mono.just(SessionRecoveryInfo(1L, 2L, "session-1", "http://gamma:9090", Long.MAX_VALUE)),
+            Mono.just(SessionRecoveryInfo(1L, 2L, "session-1", "http://gamma:9090", Long.MAX_VALUE, null)),
         )
 
         val builder = WebClient.builder().exchangeFunction { Mono.error(IllegalStateException("unreachable")) }

@@ -1,19 +1,31 @@
 package com.wordonline.matching.matching.service
 
+import com.wordonline.matching.matching.config.PracticeMatchProperties
 import com.wordonline.matching.matching.dto.AccountMemberResponseDto
 import com.wordonline.matching.matching.domain.BotPersona
 import com.wordonline.matching.matching.repository.BotPersonaRepository
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.reactive.asFlow
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Mono
 
 @Service
 class BotMemberMaker(
     private val botPersonaRepository: BotPersonaRepository,
+    private val practiceMatchProperties: PracticeMatchProperties,
 ) {
 
-    fun getRandomEnabledBotId(): Mono<Long> = botPersonaRepository.findRandomEnabled()
-        .map(BotPersona::userId)
-        .switchIfEmpty(Mono.error(IllegalStateException("No enabled bot persona is available.")))
+    // Bot ratings move with every practice result while the player's stays put, so a bot's MMR is
+    // how strong it has proven against players. Drawing from the few nearest keeps the opponent
+    // close to the player's level without handing the same player the same bot every time.
+    suspend fun getPracticeBotIdNear(mmr: Long): Long {
+        val nearest = botPersonaRepository
+            .findNearestMatchable(mmr, practiceMatchProperties.nearestBotCount.coerceAtLeast(1))
+            .asFlow()
+            .toList()
+        check(nearest.isNotEmpty()) { "No enabled bot persona is available." }
+        return nearest.random().userId
+    }
 
     fun getHospitalityBotId(): Mono<Long> = botPersonaRepository.findHospitality()
         .map(BotPersona::userId)

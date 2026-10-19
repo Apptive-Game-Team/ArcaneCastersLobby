@@ -94,6 +94,7 @@ public class WebSecurityConfig {
                 .authorizeExchange(exchange -> exchange
                                 .pathMatchers(
                                         "/api/deploy/status",
+                                        "/api/public/**",
                                         "/healthcheck").permitAll()
                                 .anyExchange().authenticated()
                 );
@@ -134,8 +135,26 @@ public class WebSecurityConfig {
         configuration.setAllowCredentials(true);
 
         var source = new UrlBasedCorsConfigurationSource();
+        // The first registered pattern that matches wins, so the public path goes before "/**".
+        source.registerCorsConfiguration("/api/public/**", publicCorsConfiguration());
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    /**
+     * {@code /api/public/**} is open to every origin on purpose: the website (and anyone else's
+     * page) reads the public ranking and magic statistics from a browser. That is safe only
+     * because these endpoints return no user data and never look at cookies or tokens; credentials
+     * stay off, so the browser will not attach any, and only GET is allowed. This must not be
+     * widened to another path - the credentialed policy above keeps its explicit origin list.
+     */
+    CorsConfiguration publicCorsConfiguration() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.addAllowedOrigin("*");
+        configuration.addAllowedMethod("GET");
+        configuration.addAllowedHeader("*");
+        configuration.setAllowCredentials(false);
+        return configuration;
     }
 
     @Bean
