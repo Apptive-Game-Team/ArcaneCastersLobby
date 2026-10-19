@@ -81,6 +81,10 @@ Confirm both landed with `gh issue view <n> --json assignees,labels` after creat
 
 ## Security & Configuration Tips
 
+Read [developer-playground.md](docs/api/developer-playground.md) before changing
+developer session creation. It must not use ordinary createSession or write
+SessionRecoveryStore; doing so overwrites the developer's ordinary match recovery.
+
 Follow [magic-previews.md](docs/api/magic-previews.md) when changing preview downloads.
 Pin every recording to the catalog's managed server ID and revision; never retry it
 against another server, and enable gzip decoding before verifying the content hash.
