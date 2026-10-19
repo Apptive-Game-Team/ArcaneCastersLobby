@@ -56,7 +56,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * ```
  * docker run -d --name lobby-quest-it-pg -e POSTGRES_USER=quest -e POSTGRES_PASSWORD=quest \
  *   -e POSTGRES_DB=quest_it -p 55477:5432 postgres:16-alpine
- * QUEST_IT_DATABASE_URL=r2dbc:pool:postgresql://quest:quest@localhost:55477/quest_it \
+ * QUEST_IT_DATABASE_URL=r2dbc:pool:postgresql://quest:quest@127.0.0.1:55477/quest_it \
  *   ./gradlew test --tests '*QuestPostgresIntegrationTest'
  * ```
  */

@@ -47,11 +47,11 @@ class MatchedTicketReconcilerTest {
     private val recovery = LostSessionRecovery(repository, userService)
     private val reconciler = MatchedTicketReconciler(repository, probe, recovery, serverHealthRegistry, properties)
 
-    private val host = "http://localhost:7777"
+    private val host = "http://127.0.0.1:7777"
     private val server = Server(
         id = 7L,
         protocol = "http",
-        domain = "localhost",
+        domain = "127.0.0.1",
         port = 7777,
         state = ServerState.ACTIVE,
         type = ServerType.GAME,
@@ -71,7 +71,7 @@ class MatchedTicketReconcilerTest {
             leftUser = UserDetailResponseDto(1L, "left", "left@team6515.com"),
             rightUser = UserDetailResponseDto(2L, "right", "right@team6515.com"),
             sessionId = sessionId,
-            webSocketUrl = "ws://localhost:7777/ws",
+            webSocketUrl = "ws://127.0.0.1:7777/ws",
         )
         listOf("ticket-1" to 1L, "ticket-2" to 2L).forEach { (ticketId, userId) ->
             val ticket = MatchTicket(

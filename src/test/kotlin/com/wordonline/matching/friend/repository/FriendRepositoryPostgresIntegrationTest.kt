@@ -30,7 +30,7 @@ import org.springframework.r2dbc.core.DatabaseClient
  * ```
  * docker run -d --name lobby-friend-it-pg -e POSTGRES_USER=t -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t \
  *   -p 55465:5432 postgres:16-alpine
- * QUEST_IT_DATABASE_URL=r2dbc:postgresql://t:t@localhost:55465/t \
+ * QUEST_IT_DATABASE_URL=r2dbc:postgresql://t:t@127.0.0.1:55465/t \
  *   ./gradlew test --tests '*FriendRepositoryPostgresIntegrationTest'
  * ```
  */

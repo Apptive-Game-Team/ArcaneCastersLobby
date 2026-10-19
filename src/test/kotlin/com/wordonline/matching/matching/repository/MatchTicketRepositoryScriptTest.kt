@@ -26,11 +26,11 @@ class MatchTicketRepositoryScriptTest {
 
     private fun matchInfo(sessionId: String = "session-1") = MatchedInfoDto(
         message = "Successfully Matched",
-        server = "http://localhost:7777",
+        server = "http://127.0.0.1:7777",
         leftUser = UserDetailResponseDto(1L, "left", "left@team6515.com"),
         rightUser = UserDetailResponseDto(2L, "right", "right@team6515.com"),
         sessionId = sessionId,
-        webSocketUrl = "ws://localhost:7777/ws",
+        webSocketUrl = "ws://127.0.0.1:7777/ws",
     )
 
     private fun ticket(

@@ -2,8 +2,8 @@
   "attemptId": "attempt-1",
   "sessionId": "session-1",
   "ready": true,
-  "serverUrl": "http://localhost:7777",
-  "webSocketUrl": "http://localhost:7777/ws",
+  "serverUrl": "http://127.0.0.1:7777",
+  "webSocketUrl": "http://127.0.0.1:7777/ws",
   "instanceId": "00000000-0000-0000-0000-000000000001",
   "mapType": "GRASSLAND"
 }

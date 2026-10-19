@@ -26,11 +26,11 @@ class MatchTicketSerializationTest {
             version = 3L,
             matchInfo = MatchedInfoDto(
                 message = "Successfully Matched",
-                server = "http://localhost:7777",
+                server = "http://127.0.0.1:7777",
                 leftUser = UserDetailResponseDto(1L, "left", "left@example.com"),
                 rightUser = UserDetailResponseDto(2L, "right", "right@example.com"),
                 sessionId = "session-1",
-                webSocketUrl = "http://localhost:7777/ws",
+                webSocketUrl = "http://127.0.0.1:7777/ws",
                 mapType = "FORTRESS",
             ),
             attemptId = "attempt-1",
@@ -45,8 +45,8 @@ class MatchTicketSerializationTest {
         val decoded = objectMapper.readValue(json, MatchTicket::class.java)
 
         assertThat(decoded).isEqualTo(ticket)
-        assertThat(decoded.matchInfo?.server).isEqualTo("http://localhost:7777")
-        assertThat(decoded.matchInfo?.webSocketUrl).isEqualTo("http://localhost:7777/ws")
+        assertThat(decoded.matchInfo?.server).isEqualTo("http://127.0.0.1:7777")
+        assertThat(decoded.matchInfo?.webSocketUrl).isEqualTo("http://127.0.0.1:7777/ws")
         assertThat(decoded.serverInstanceId)
             .`as`("호스트 재시작 판별의 유일한 근거이므로 왕복에서 사라지면 안 된다")
             .isEqualTo("boot-1")
@@ -67,7 +67,7 @@ class MatchTicketSerializationTest {
             version = 3L,
             matchInfo = MatchedInfoDto(
                 message = "Successfully Matched",
-                server = "http://localhost:7777",
+                server = "http://127.0.0.1:7777",
                 leftUser = UserDetailResponseDto(1L, "left", "left@example.com"),
                 rightUser = UserDetailResponseDto(2L, "right", "right@example.com"),
                 sessionId = "session-1",
@@ -110,7 +110,7 @@ class MatchTicketSerializationTest {
             version = 3L,
             matchInfo = MatchedInfoDto(
                 message = "Successfully Matched",
-                server = "http://localhost:7777",
+                server = "http://127.0.0.1:7777",
                 leftUser = UserDetailResponseDto(1L, "left", "left@example.com"),
                 rightUser = UserDetailResponseDto(2L, "right", "right@example.com"),
                 sessionId = "session-1",

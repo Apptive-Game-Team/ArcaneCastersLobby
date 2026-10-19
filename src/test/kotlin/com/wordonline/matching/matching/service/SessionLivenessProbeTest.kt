@@ -34,7 +34,7 @@ class SessionLivenessProbeTest {
     private val serverHealthRegistry = ServerHealthRegistry(GameServerProperties())
     private val probe = SessionLivenessProbe(legacyGameMatchService, serverHealthRegistry)
 
-    private val host = "http://localhost:7777"
+    private val host = "http://127.0.0.1:7777"
 
     init {
         serverHealthRegistry.replaceServers(
@@ -42,7 +42,7 @@ class SessionLivenessProbeTest {
                 Server(
                     id = 7L,
                     protocol = "http",
-                    domain = "localhost",
+                    domain = "127.0.0.1",
                     port = 7777,
                     state = ServerState.ACTIVE,
                     type = ServerType.GAME,
@@ -64,7 +64,7 @@ class SessionLivenessProbeTest {
             leftUser = UserDetailResponseDto(1L, "left", "left@team6515.com"),
             rightUser = UserDetailResponseDto(2L, "right", "right@team6515.com"),
             sessionId = "session-1",
-            webSocketUrl = "ws://localhost:7777/ws",
+            webSocketUrl = "ws://127.0.0.1:7777/ws",
         ),
         serverId = 7L,
         serverInstanceId = instanceId,

@@ -44,8 +44,8 @@ class GameServerContractTest {
         assertThat(response.attemptId).isEqualTo("attempt-1")
         assertThat(response.sessionId).isEqualTo("session-1")
         assertThat(response.ready).isTrue()
-        assertThat(response.serverUrl).isEqualTo("http://localhost:7777")
-        assertThat(response.webSocketUrl).isEqualTo("http://localhost:7777/ws")
+        assertThat(response.serverUrl).isEqualTo("http://127.0.0.1:7777")
+        assertThat(response.webSocketUrl).isEqualTo("http://127.0.0.1:7777/ws")
         assertThat(response.mapType).isEqualTo("GRASSLAND")
     }
 

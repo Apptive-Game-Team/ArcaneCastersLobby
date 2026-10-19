@@ -104,7 +104,7 @@ class PublicStatsEndpointsTest {
 
     @Test
     fun `공개 경로의 preflight 는 임의의 origin 에 와일드카드를 돌려주고 credentials 를 허용하지 않는다`() {
-        webTestClient.options().uri("http://localhost/api/public/rankings")
+        webTestClient.options().uri("http://127.0.0.1/api/public/rankings")
             .header(HttpHeaders.ORIGIN, "https://some-random-site.example")
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
             .exchange()
@@ -115,7 +115,7 @@ class PublicStatsEndpointsTest {
 
     @Test
     fun `공개 경로는 GET 외의 메서드 preflight 를 거절한다`() {
-        webTestClient.options().uri("http://localhost/api/public/rankings")
+        webTestClient.options().uri("http://127.0.0.1/api/public/rankings")
             .header(HttpHeaders.ORIGIN, "https://some-random-site.example")
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpMethod.POST.name())
             .exchange()
@@ -128,7 +128,7 @@ class PublicStatsEndpointsTest {
             whenever(publicStatsService.getRanking()).thenReturn(PublicRankingResponse(updatedAt, emptyList()))
         }
 
-        webTestClient.get().uri("http://localhost/api/public/rankings")
+        webTestClient.get().uri("http://127.0.0.1/api/public/rankings")
             .header(HttpHeaders.ORIGIN, "https://some-random-site.example")
             .exchange()
             .expectStatus().isOk
@@ -138,7 +138,7 @@ class PublicStatsEndpointsTest {
 
     @Test
     fun `다른 경로는 기존 credentials 정책을 유지해 낯선 origin 을 거절한다`() {
-        webTestClient.options().uri("http://localhost/api/match")
+        webTestClient.options().uri("http://127.0.0.1/api/match")
             .header(HttpHeaders.ORIGIN, "https://some-random-site.example")
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
             .exchange()
@@ -147,7 +147,7 @@ class PublicStatsEndpointsTest {
 
     @Test
     fun `다른 경로는 허용된 origin 에 credentials 를 허용한다`() {
-        webTestClient.options().uri("http://localhost/api/match")
+        webTestClient.options().uri("http://127.0.0.1/api/match")
             .header(HttpHeaders.ORIGIN, "https://arcanecasters.theevilent.com")
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
             .exchange()

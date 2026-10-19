@@ -26,7 +26,7 @@ data class CorsProperties(
         }
     }
 
-    /** Spring origin patterns, which is what lets the localhost entry cover any dev port. */
+    /** Spring origin patterns, which is what lets the localhost and 127.0.0.1 entries cover any dev port. */
     val originPatterns: List<String>
         get() = allowedOrigins.map(String::trim).filter(String::isNotEmpty)
 

@@ -49,11 +49,11 @@ class SessionEndedNotificationServiceTest {
     private val service = SessionEndedNotificationService(repository, probe, recovery)
 
     private val matchedAt = Instant.parse("2026-08-10T00:00:00Z")
-    private val host = "http://localhost:7777"
+    private val host = "http://127.0.0.1:7777"
     private val server = Server(
         id = 7L,
         protocol = "http",
-        domain = "localhost",
+        domain = "127.0.0.1",
         port = 7777,
         state = ServerState.ACTIVE,
         type = ServerType.GAME,
@@ -71,7 +71,7 @@ class SessionEndedNotificationServiceTest {
         leftUser = UserDetailResponseDto(1L, "left", "left@team6515.com"),
         rightUser = UserDetailResponseDto(2L, "right", "right@team6515.com"),
         sessionId = sessionId,
-        webSocketUrl = "ws://localhost:7777/ws",
+        webSocketUrl = "ws://127.0.0.1:7777/ws",
     )
 
     private fun matchedTicket(

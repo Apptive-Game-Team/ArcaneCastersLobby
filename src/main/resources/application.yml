@@ -22,7 +22,7 @@ spring:
     import: optional:file:.env[.properties]
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
   r2dbc:
     url: ${DATABASE_URL}
@@ -52,9 +52,9 @@ deploy:
 # caller's Origin back and let that site read a logged-in member's data.
 # html-classic.itch.zone is the address itch.io serves the WebGL build from.
 # theevilent.com is the team website, whose account page reads and deletes the member's lobby data.
-# Entries are Spring origin patterns, which is what lets the localhost entry cover any dev port.
+# Entries are Spring origin patterns, which is what lets the localhost and 127.0.0.1 entries cover any dev port.
 cors:
-  allowed-origins: "${CORS_ALLOWED_ORIGINS:https://theevilent.com,https://arcanecasters.theevilent.com,https://html-classic.itch.zone,http://localhost:[*]}"
+  allowed-origins: "${CORS_ALLOWED_ORIGINS:https://theevilent.com,https://arcanecasters.theevilent.com,https://html-classic.itch.zone,http://localhost:[*],http://127.0.0.1:[*]}"
 
 # Bound to InternalApiProperties. Guards /api/internal/**, the server-to-server surface.
 # Callers present an account-server "server token" as a bearer token; no credential is stored

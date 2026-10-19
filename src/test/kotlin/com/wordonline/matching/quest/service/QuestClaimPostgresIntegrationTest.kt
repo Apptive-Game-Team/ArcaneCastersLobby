@@ -64,7 +64,7 @@ import reactor.core.publisher.Mono
  * the database [DATABASE_NAME] from `QUEST_IT_MIGRATION_DIR`.
  *
  * ```
- * QUEST_IT_DATABASE_URL=r2dbc:pool:postgresql://quest:quest@localhost:55477/quest_it \
+ * QUEST_IT_DATABASE_URL=r2dbc:pool:postgresql://quest:quest@127.0.0.1:55477/quest_it \
  * QUEST_IT_MIGRATION_DIR=/path/to/database/migration \
  *   ./gradlew test --tests '*QuestClaimPostgresIntegrationTest'
  * ```
