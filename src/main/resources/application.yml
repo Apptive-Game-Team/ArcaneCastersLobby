@@ -68,6 +68,8 @@ matching:
   ticket:
     queue-timeout: 5m
     allocation-lease: 30s
+    # A QUEUED ticket with no human opponent after this long is matched with a bot near its MMR.
+    bot-fallback-after: ${MATCHING_BOT_FALLBACK_AFTER:15s}
     # Applies to terminal tickets only. A MATCHED ticket never expires while its session runs.
     terminal-ttl: 30m
     # MATCHED reconciler. Raise the interval far above a session's lifetime to disable the sweep.
