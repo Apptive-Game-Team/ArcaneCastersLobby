@@ -131,7 +131,7 @@ class LocalSessionServiceTest {
         verifyBlocking(store) { save(saved.capture()) }
         assertThat(saved.firstValue.hospitalityBot).isTrue()
         assertThat(saved.firstValue.state).isEqualTo(LocalSessionState.ISSUED)
-        verifyBlocking(botMemberMaker, never()) { getRandomEnabledBotId() }
+        verifyBlocking(botMemberMaker, never()) { getPracticeBotIdNear(any()) }
     }
 
     @Test
