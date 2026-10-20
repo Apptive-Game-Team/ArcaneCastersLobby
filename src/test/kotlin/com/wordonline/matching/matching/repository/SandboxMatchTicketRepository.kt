@@ -61,6 +61,15 @@ fun sandboxMatchTicketRepository(
             Flux.fromIterable(byScore(sandbox, invocation.getArgument(0), invocation.getArgument(1)))
         }
 
+    whenever(zSetOps.range(any<String>(), any<Range<Long>>())).thenAnswer { invocation ->
+        val key = invocation.getArgument<String>(0)
+        val range = invocation.getArgument<Range<Long>>(1)
+        val upper = range.upperBound.value.orElse(Long.MAX_VALUE)
+        val lower = range.lowerBound.value.orElse(0L)
+        val ordered = byScore(sandbox, key, Range.unbounded())
+        Flux.fromIterable(ordered.filterIndexed { index, _ -> index.toLong() in lower..upper })
+    }
+
     whenever(zSetOps.add(any<String>(), any<String>(), any<Double>())).thenAnswer { invocation ->
         sandbox.zadd(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2))
         Mono.just(true)

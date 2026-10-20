@@ -46,6 +46,13 @@ data class MatchTicket(
     val deckCardIds: List<Long>? = null,
     /** Client-measured ping in ms to each game server (`servers.id` -> ms), used to pick the host. */
     val serverPings: Map<Long, Long>? = null,
+    /**
+     * The user asked to cancel while the ticket was `ALLOCATING`, when the match may still
+     * succeed. Set by the cancel script; read when the allocation ends without a match so the
+     * ticket becomes `CANCELED` instead of going back to `QUEUED` or `FAILED`. Tickets stored
+     * before this field existed decode as `false`.
+     */
+    val cancelRequested: Boolean = false,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
