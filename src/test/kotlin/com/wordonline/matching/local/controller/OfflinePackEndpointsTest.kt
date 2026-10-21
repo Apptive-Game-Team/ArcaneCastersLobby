@@ -78,7 +78,7 @@ class OfflinePackEndpointsTest {
             .jsonPath("$.localServer.version").isEqualTo("1.3.0")
             .jsonPath("$.localServer.minimumVersion").isEqualTo("1.3.0")
             .jsonPath("$.localServer.assets.windows-x64").isEqualTo(
-                "https://github.com/Apptive-Game-Team/ArcaneCastersGameRust/releases/download/v1.3.0/local-server-windows-x64.zip",
+                "https://raw.githubusercontent.com/Apptive-Game-Team/ArcaneCastersPlay/local-server-bundles/v1.3.0/local-server-windows-x64.zip",
             )
             .jsonPath("$.localServer.assets.length()").isEqualTo(4)
     }
