@@ -17,7 +17,7 @@ data class LocalServerProperties(
     val version: String = "",
     val minimumVersion: String = "",
     val assetUrlTemplate: String =
-        "https://github.com/Apptive-Game-Team/ArcaneCastersGame/releases/download/v{version}/local-server-{platform}.zip",
+        "https://github.com/Apptive-Game-Team/ArcaneCastersGameRust/releases/download/v{version}/local-server-{platform}.zip",
 ) {
     companion object {
         val PLATFORMS = listOf("windows-x64", "macos-x64", "macos-arm64", "linux-x64")
