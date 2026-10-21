@@ -94,3 +94,18 @@ gameserver:
   # Consecutive failed probes before a server stops receiving new sessions.
   # One success restores it immediately.
   failure-threshold: ${GAMESERVER_FAILURE_THRESHOLD:3}
+
+# Bound to LocalServerProperties. The local server bundle announced by GET /api/offline-pack.
+# An empty version announces no bundle (localServer: null); an empty minimum-version means version.
+local-server:
+  version: ${LOCAL_SERVER_VERSION:0.1.0}
+  minimum-version: ${LOCAL_SERVER_MINIMUM_VERSION:}
+
+# Bound to LocalSessionProperties. Matches the desktop client hosts on its own machine.
+local-sessions:
+  # Turns local matches off without a deploy: the offline pack says so and session issue answers 503.
+  enabled: ${LOCAL_SESSIONS_ENABLED:true}
+
+offline-pack:
+  # How often the static data of GET /api/offline-pack is rebuilt from the database.
+  static-data-refresh-interval: ${OFFLINE_PACK_STATIC_DATA_REFRESH_INTERVAL:5m}

@@ -37,6 +37,11 @@ class RedisScriptSandbox(private val objectMapper: ObjectMapper = ObjectMapper()
         expiries.remove(key)
     }
 
+    fun set(key: String, value: String, ttlMillis: Long) {
+        values[key] = value
+        expiries[key] = ttlMillis
+    }
+
     fun get(key: String): String? = values[key]
 
     fun exists(key: String): Boolean = values.containsKey(key)
@@ -110,6 +115,13 @@ class RedisScriptSandbox(private val objectMapper: ObjectMapper = ObjectMapper()
                     expiries.remove(arg(index))
                 }
                 LuaValue.valueOf(removed)
+            }
+            "PTTL" -> {
+                val key = arg(2)
+                when {
+                    !values.containsKey(key) -> LuaValue.valueOf(-2)
+                    else -> LuaValue.valueOf((expiries[key] ?: -1L).toDouble())
+                }
             }
             "PEXPIRE" -> {
                 val key = arg(2)
