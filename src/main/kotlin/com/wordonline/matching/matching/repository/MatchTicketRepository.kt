@@ -52,6 +52,7 @@ class MatchTicketRepository(
 
     private val enqueueScript = DefaultRedisScript(ENQUEUE_SCRIPT, String::class.java)
     private val claimScript = DefaultRedisScript(CLAIM_SCRIPT, Long::class.java)
+    private val claimSingleScript = DefaultRedisScript(CLAIM_SINGLE_SCRIPT, Long::class.java)
     private val transitionScript = DefaultRedisScript(TRANSITION_SCRIPT, String::class.java)
     private val transitionPairScript = DefaultRedisScript(TRANSITION_PAIR_SCRIPT, Long::class.java)
     private val cancelScript = DefaultRedisScript(CANCEL_SCRIPT, String::class.java)
@@ -76,6 +77,20 @@ class MatchTicketRepository(
             claimScript,
             listOf(QUEUE_KEY, ticketKey(first.ticketId), ticketKey(second.ticketId), eventKey(first.userId), eventKey(second.userId), LEASE_KEY),
             listOf(encode(first), encode(second), first.userId.toString(), second.userId.toString(), first.allocationLeaseUntil!!.toEpochMilli().toString()),
+        ).next().awaitSingle()
+        return result == 1L
+    }
+
+    /**
+     * Moves one `QUEUED` ticket to `ALLOCATING` and puts it under an allocation lease, so a
+     * lobby that dies mid-allocation still gets the ticket recovered. [ticket] is the
+     * already-updated `ALLOCATING` copy.
+     */
+    suspend fun claim(ticket: MatchTicket): Boolean {
+        val result = redis.execute(
+            claimSingleScript,
+            listOf(QUEUE_KEY, ticketKey(ticket.ticketId), eventKey(ticket.userId), LEASE_KEY),
+            listOf(encode(ticket), ticket.userId.toString(), ticket.allocationLeaseUntil!!.toEpochMilli().toString()),
         ).next().awaitSingle()
         return result == 1L
     }
@@ -259,6 +274,16 @@ redis.call('SET', KEYS[2], ARGV[1]); redis.call('SET', KEYS[3], ARGV[2])
 redis.call('ZREM', KEYS[1], ARGV[3], ARGV[4])
 redis.call('ZADD', KEYS[6], ARGV[5], cjson.decode(ARGV[1]).ticketId, ARGV[5], cjson.decode(ARGV[2]).ticketId)
 redis.call('PUBLISH', KEYS[4], ARGV[1]); redis.call('PUBLISH', KEYS[5], ARGV[2])
+return 1
+"""
+
+private const val CLAIM_SINGLE_SCRIPT = """
+local current = redis.call('GET', KEYS[2])
+if not current or cjson.decode(current).state ~= 'QUEUED' then return 0 end
+redis.call('SET', KEYS[2], ARGV[1])
+redis.call('ZREM', KEYS[1], ARGV[2])
+redis.call('ZADD', KEYS[4], ARGV[3], cjson.decode(ARGV[1]).ticketId)
+redis.call('PUBLISH', KEYS[3], ARGV[1])
 return 1
 """
 
