@@ -235,6 +235,17 @@ class GameMatchService(
         val now = Instant.now(clock)
         for (ticket in matchTicketRepository.expiredAllocations()) {
             if (ticket.state != MatchTicketState.ALLOCATING) continue
+            if (ticket.cancelRequested) {
+                // The user canceled while the match was still being allocated. Re-queueing
+                // would silently undo that. If the cancel lands after this read instead, the
+                // script refuses the QUEUED transition and the next sweep ends up here.
+                val canceled = ticket.copy(state = MatchTicketState.CANCELED, version = ticket.version + 1, reason = "USER_REQUESTED", allocationLeaseUntil = null, updatedAt = now)
+                if (matchTicketRepository.transition(canceled, MatchTicketState.ALLOCATING) != null) {
+                    userService.markOnline(ticket.userId).awaitSingleOrNull()
+                    log.info("Canceled expired allocation on user request: ticketId={}", ticket.ticketId)
+                }
+                continue
+            }
             val queued = ticket.copy(state = MatchTicketState.QUEUED, version = ticket.version + 1, reason = "ALLOCATION_LEASE_EXPIRED", attemptId = null, allocationLeaseUntil = null, updatedAt = now)
             if (matchTicketRepository.transition(queued, MatchTicketState.ALLOCATING) != null) {
                 log.info("Recovered expired allocation: ticketId={}", ticket.ticketId)
