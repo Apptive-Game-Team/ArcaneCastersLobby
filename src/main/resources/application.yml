@@ -98,7 +98,7 @@ gameserver:
 # Bound to LocalServerProperties. The local server bundle announced by GET /api/offline-pack.
 # An empty version announces no bundle (localServer: null); an empty minimum-version means version.
 local-server:
-  version: ${LOCAL_SERVER_VERSION:}
+  version: ${LOCAL_SERVER_VERSION:0.1.0}
   minimum-version: ${LOCAL_SERVER_MINIMUM_VERSION:}
 
 # Bound to LocalSessionProperties. Matches the desktop client hosts on its own machine.
