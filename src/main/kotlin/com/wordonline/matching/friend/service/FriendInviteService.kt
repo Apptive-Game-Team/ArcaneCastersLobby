@@ -27,6 +27,7 @@ class FriendInviteService(
     private val matchingQueueRepository: MatchingQueueRepository,
     private val legacyGameMatchService: LegacyGameMatchService,
     private val friendEventService: FriendEventService,
+    private val friendPresenceService: FriendPresenceService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val invites = ConcurrentHashMap<String, FriendInvite>()
@@ -35,6 +36,9 @@ class FriendInviteService(
         if (!friendRepository.existsByUserIdAndFriendId(inviterId, friendId)) {
             throw IllegalStateException("User $friendId is not your friend")
         }
+
+        check(friendPresenceService.status(inviterId) == "Online" &&
+            friendPresenceService.status(friendId) == "Online") { "Both players must be online and available" }
 
         val inviterDeckValid = deckService.hasValidSelectedDeck(inviterId).awaitSingle()
         if (!inviterDeckValid) {
@@ -74,7 +78,14 @@ class FriendInviteService(
             expiresAt = now.plusSeconds(30),
         )
 
-        invites[inviteId] = invite
+        synchronized(invites) {
+            cleanExpiredInvites()
+            check(invites.values.none {
+                it.status == FriendInviteStatus.PENDING &&
+                    setOf(it.inviterId, it.inviteeId) == setOf(inviterId, friendId)
+            }) { "An active invite already exists between users" }
+            invites[inviteId] = invite
+        }
         val dto = FriendInviteDto.from(invite)
 
         friendEventService.publish(
@@ -102,7 +113,7 @@ class FriendInviteService(
         }
 
         if (Instant.now().isAfter(invite.expiresAt)) {
-            invites[inviteId] = invite.copy(status = FriendInviteStatus.EXPIRED)
+            cleanExpiredInvites()
             throw IllegalStateException("Invite has expired")
         }
 
@@ -111,11 +122,11 @@ class FriendInviteService(
         val placement = legacyGameMatchService.createSession(sessionDto)
         val matchInfo = placement.matchInfo
 
-        val updatedInvite = invite.copy(
-            status = FriendInviteStatus.ACCEPTED,
-            matchInfo = matchInfo,
-        )
-        invites[inviteId] = updatedInvite
+        // 방 생성 중 도착한 수신 확인과 revision을 이전 스냅샷으로 덮어쓰지 않는다.
+        val updatedInvite = invites.compute(inviteId) { _, current ->
+            val latest = current ?: invite
+            latest.copy(status = FriendInviteStatus.ACCEPTED, matchInfo = matchInfo, revision = latest.revision + 1)
+        }!!
 
         val readyEvent = FriendEvent(
             type = FriendEventType.FRIEND_MATCH_READY,
@@ -138,9 +149,14 @@ class FriendInviteService(
             throw IllegalStateException("You are not the recipient of this invite")
         }
 
-        val updated = invite.copy(status = FriendInviteStatus.REJECTED)
-        invites[inviteId] = updated
+        val updated = finishPending(inviteId, FriendInviteStatus.REJECTED)
         val dto = FriendInviteDto.from(updated)
+        if (updated.status == FriendInviteStatus.EXPIRED) {
+            val event = FriendEvent(FriendEventType.FRIEND_INVITE_EXPIRED, invite = dto)
+            friendEventService.publish(updated.inviterId, event)
+            friendEventService.publish(updated.inviteeId, event)
+            return dto
+        }
 
         friendEventService.publish(
             invite.inviterId,
@@ -162,9 +178,14 @@ class FriendInviteService(
             throw IllegalStateException("You are not the sender of this invite")
         }
 
-        val updated = invite.copy(status = FriendInviteStatus.CANCELED)
-        invites[inviteId] = updated
+        val updated = finishPending(inviteId, FriendInviteStatus.CANCELED)
         val dto = FriendInviteDto.from(updated)
+        if (updated.status == FriendInviteStatus.EXPIRED) {
+            val event = FriendEvent(FriendEventType.FRIEND_INVITE_EXPIRED, invite = dto)
+            friendEventService.publish(updated.inviterId, event)
+            friendEventService.publish(updated.inviteeId, event)
+            return dto
+        }
 
         friendEventService.publish(
             invite.inviteeId,
@@ -182,18 +203,52 @@ class FriendInviteService(
         cleanExpiredInvites()
         return invites.values
             .filter { it.inviteeId == userId && it.status == FriendInviteStatus.PENDING && Instant.now().isBefore(it.expiresAt) }
+            .sortedBy { it.createdAt }
             .map { FriendInviteDto.from(it) }
     }
 
+    fun getSentInvites(userId: Long): List<FriendInviteDto> {
+        cleanExpiredInvites()
+        return invites.values.filter { it.inviterId == userId }
+            .sortedBy { it.createdAt }.map { FriendInviteDto.from(it) }
+    }
+
+    fun acknowledgeInvite(userId: Long, inviteId: String): FriendInviteDto {
+        cleanExpiredInvites()
+        val updated = invites.compute(inviteId) { _, current ->
+            val invite = requireNotNull(current) { "Invite not found" }
+            check(invite.inviteeId == userId) { "You are not the recipient of this invite" }
+            if (invite.status != FriendInviteStatus.PENDING || invite.deliveredAt != null) invite
+            else invite.copy(deliveredAt = Instant.now(), revision = invite.revision + 1)
+        }!!
+        val dto = FriendInviteDto.from(updated)
+        friendEventService.publish(updated.inviterId, FriendEvent(FriendEventType.FRIEND_INVITE_DELIVERED, invite = dto))
+        return dto
+    }
+
+    private fun finishPending(inviteId: String, status: FriendInviteStatus): FriendInvite =
+        invites.compute(inviteId) { _, current ->
+            val invite = requireNotNull(current) { "Invite not found" }
+            if (invite.status == status) invite
+            else {
+                check(invite.status == FriendInviteStatus.PENDING) { "Invite is no longer pending" }
+                val next = if (!Instant.now().isBefore(invite.expiresAt)) FriendInviteStatus.EXPIRED else status
+                invite.copy(status = next, revision = invite.revision + 1)
+            }
+        }!!
+
     private fun cleanExpiredInvites() {
         val now = Instant.now()
-        val iterator = invites.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (entry.value.status == FriendInviteStatus.PENDING && now.isAfter(entry.value.expiresAt)) {
-                entry.setValue(entry.value.copy(status = FriendInviteStatus.EXPIRED))
-            } else if (now.isAfter(entry.value.createdAt.plusSeconds(300))) {
-                iterator.remove()
+        for (id in invites.keys) {
+            invites.computeIfPresent(id) { _, invite ->
+                if (now.isAfter(invite.createdAt.plusSeconds(300))) null
+                else if (invite.status == FriendInviteStatus.PENDING && !now.isBefore(invite.expiresAt)) {
+                    val expired = invite.copy(status = FriendInviteStatus.EXPIRED, revision = invite.revision + 1)
+                    val event = FriendEvent(FriendEventType.FRIEND_INVITE_EXPIRED, invite = FriendInviteDto.from(expired))
+                    friendEventService.publish(invite.inviterId, event)
+                    friendEventService.publish(invite.inviteeId, event)
+                    expired
+                } else invite
             }
         }
     }

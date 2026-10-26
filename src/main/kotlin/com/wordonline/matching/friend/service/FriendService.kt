@@ -1,6 +1,5 @@
 package com.wordonline.matching.friend.service
 
-import com.wordonline.matching.auth.domain.UserStatus
 import com.wordonline.matching.auth.service.UserService
 import com.wordonline.matching.friend.domain.FriendEvent
 import com.wordonline.matching.friend.domain.FriendEventType
@@ -29,6 +28,7 @@ class FriendService(
     private val accountClient: AccountClient,
     private val userService: UserService,
     private val friendEventService: FriendEventService,
+    private val friendPresenceService: FriendPresenceService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -38,7 +38,7 @@ class FriendService(
             try {
                 val member = accountClient.getMemberSuspend(friendId)
                 val mmr = userService.getMmr(friendId).awaitSingleOrNull() ?: 0L
-                val status = userService.getStatus(friendId).awaitSingleOrNull() ?: UserStatus.Online
+                val status = friendPresenceService.status(friendId)
                 FriendSummaryDto(
                     userId = friendId,
                     name = member.displayName,

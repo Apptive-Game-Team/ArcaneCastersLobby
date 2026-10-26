@@ -31,6 +31,7 @@ class FriendServiceTest {
     private val accountClient: AccountClient = mock()
     private val userService: UserService = mock()
     private val friendEventService: FriendEventService = mock()
+    private val friendPresenceService: FriendPresenceService = mock()
 
     private val friendService = FriendService(
         friendRepository = friendRepository,
@@ -38,6 +39,7 @@ class FriendServiceTest {
         accountClient = accountClient,
         userService = userService,
         friendEventService = friendEventService,
+        friendPresenceService = friendPresenceService,
     )
 
     @Test
@@ -51,7 +53,7 @@ class FriendServiceTest {
             AccountMemberResponseDto(email = "friend@example.com", name = "FriendUser", id = friendId)
         )
         whenever(userService.getMmr(friendId)).thenReturn(Mono.just(1200L))
-        whenever(userService.getStatus(friendId)).thenReturn(Mono.just(UserStatus.Online))
+        whenever(friendPresenceService.status(friendId)).thenReturn("Offline")
 
         val result = friendService.getFriends(userId)
 
@@ -60,7 +62,7 @@ class FriendServiceTest {
         assertThat(friend.userId).isEqualTo(friendId)
         assertThat(friend.name).isEqualTo("FriendUser")
         assertThat(friend.mmr).isEqualTo(1200L)
-        assertThat(friend.status).isEqualTo(UserStatus.Online)
+        assertThat(friend.status).isEqualTo("Offline")
     }
 
     @Test
