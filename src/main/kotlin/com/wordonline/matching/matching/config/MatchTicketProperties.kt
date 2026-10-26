@@ -8,6 +8,11 @@ data class MatchTicketProperties(
     val queueTimeout: Duration = Duration.ofMinutes(5),
     val allocationLease: Duration = Duration.ofSeconds(30),
     /**
+     * How long a `QUEUED` ticket waits for a human opponent before the lobby matches it with
+     * a bot of similar MMR. Measured from the ticket's `createdAt`.
+     */
+    val botFallbackAfter: Duration = Duration.ofSeconds(15),
+    /**
      * How long a finished ticket stays readable so a reconnecting client can still see why
      * it ended. Only terminal tickets carry it; a `MATCHED` ticket must never expire while
      * its session is running.
