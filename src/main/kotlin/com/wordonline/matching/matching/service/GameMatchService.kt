@@ -37,6 +37,7 @@ import java.util.UUID
 @Service
 class GameMatchService(
     private val practiceOpponentSelector: PracticeOpponentSelector,
+    private val botMemberMaker: BotMemberMaker,
     private val legacyGameMatchService: LegacyGameMatchService,
     private val userService: UserService,
     private val deckService: DeckService,
