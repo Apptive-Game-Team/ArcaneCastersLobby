@@ -11,9 +11,10 @@ cached in memory for `public-stats.cache-ttl` (default 5 minutes). Settings live
   "players": [ { "rank": 1, "name": "닉네임", "mmr": 1234, "wins": 40, "losses": 21, "draws": 2 } ] }
 ```
 
-- Top `ranking-size` (50) real users (id > 0) by mmr desc, then wins desc, then user id asc.
+- 일반 사용자(id > 0)와 `bot_personas.enabled = true`인 봇을 MMR 내림차순, 승수 내림차순, 사용자 ID 오름차순으로 정렬해 상위 `ranking-size`(50)명을 반환한다.
+- 봇 이름은 `bot_personas.name`을 사용하며, 계정 서버에서 조회하지 않는다.
 - Needs at least `ranking-min-games` (5) finished PVP games with outcome WIN or DRAW; practice and abandoned games are not counted.
-- Names come from the account server. Players whose lookup fails and guest accounts are skipped; ranks stay contiguous. Guest exclusion works only once the account server sends `guest` in `GET /api/members/{id}`.
+- 일반 사용자 이름은 계정 서버에서 조회한다. 조회에 실패한 사용자와 게스트 계정은 제외하고 순위 번호를 이어 붙인다. 게스트 제외에는 계정 서버의 `GET /api/members/{id}` 응답에 `guest` 필드가 필요하다.
 - Email and user id are never returned.
 
 ## GET /api/public/statistics/magics

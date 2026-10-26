@@ -48,7 +48,11 @@ class PublicStatsService(
             limit = properties.rankingSize * properties.rankingCandidateFactor,
         )
         val names = coroutineScope {
-            candidates.map { candidate -> async { lookUpPublicName(candidate.userId) } }.awaitAll()
+            candidates.map { candidate ->
+                async {
+                    if (candidate.userId < 0) candidate.botName else lookUpPublicName(candidate.userId)
+                }
+            }.awaitAll()
         }
         val players = candidates.zip(names)
             .mapNotNull { (candidate, name) -> name?.let { candidate to it } }

@@ -68,6 +68,8 @@ matching:
   ticket:
     queue-timeout: 5m
     allocation-lease: 30s
+    # A QUEUED ticket with no human opponent after this long is matched with a bot near its MMR.
+    bot-fallback-after: ${MATCHING_BOT_FALLBACK_AFTER:15s}
     # Applies to terminal tickets only. A MATCHED ticket never expires while its session runs.
     terminal-ttl: 30m
     # MATCHED reconciler. Raise the interval far above a session's lifetime to disable the sweep.
@@ -95,6 +97,10 @@ gameserver:
   # One success restores it immediately.
   failure-threshold: ${GAMESERVER_FAILURE_THRESHOLD:3}
 
+# Administrator playground enabled by default; false removes its routes.
+playground:
+  enabled: ${PLAYGROUND_ENABLED:true}
+  
 # Bound to LocalServerProperties. The local server bundle announced by GET /api/offline-pack.
 # An empty version announces no bundle (localServer: null); an empty minimum-version means version.
 local-server:

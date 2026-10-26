@@ -52,6 +52,7 @@ class MatchTicketRepository(
 
     private val enqueueScript = DefaultRedisScript(ENQUEUE_SCRIPT, String::class.java)
     private val claimScript = DefaultRedisScript(CLAIM_SCRIPT, Long::class.java)
+    private val claimSingleScript = DefaultRedisScript(CLAIM_SINGLE_SCRIPT, Long::class.java)
     private val transitionScript = DefaultRedisScript(TRANSITION_SCRIPT, String::class.java)
     private val transitionPairScript = DefaultRedisScript(TRANSITION_PAIR_SCRIPT, Long::class.java)
     private val cancelScript = DefaultRedisScript(CANCEL_SCRIPT, String::class.java)
@@ -76,6 +77,20 @@ class MatchTicketRepository(
             claimScript,
             listOf(QUEUE_KEY, ticketKey(first.ticketId), ticketKey(second.ticketId), eventKey(first.userId), eventKey(second.userId), LEASE_KEY),
             listOf(encode(first), encode(second), first.userId.toString(), second.userId.toString(), first.allocationLeaseUntil!!.toEpochMilli().toString()),
+        ).next().awaitSingle()
+        return result == 1L
+    }
+
+    /**
+     * Moves one `QUEUED` ticket to `ALLOCATING` and puts it under an allocation lease, so a
+     * lobby that dies mid-allocation still gets the ticket recovered. [ticket] is the
+     * already-updated `ALLOCATING` copy.
+     */
+    suspend fun claim(ticket: MatchTicket): Boolean {
+        val result = redis.execute(
+            claimSingleScript,
+            listOf(QUEUE_KEY, ticketKey(ticket.ticketId), eventKey(ticket.userId), LEASE_KEY),
+            listOf(encode(ticket), ticket.userId.toString(), ticket.allocationLeaseUntil!!.toEpochMilli().toString()),
         ).next().awaitSingle()
         return result == 1L
     }
@@ -252,6 +267,31 @@ redis.call('PUBLISH', KEYS[4], ARGV[1])
 return ARGV[1]
 """
 
+/**
+ * Lua helper shared by the transition scripts. `settle(storedRaw, payload)` returns the
+ * payload to write, or `nil` when the transition must be refused.
+ *
+ * The payload is computed in Kotlin from a copy read before the transition, so it cannot
+ * know about a `cancelRequested` written in between. Only when the stored ticket carries
+ * that flag is the payload decoded and rewritten, which keeps every other transition
+ * byte-for-byte as Kotlin produced it:
+ * - `QUEUED` is refused, so a user who canceled is not silently re-queued;
+ * - `FAILED` becomes `CANCELED` with reason `USER_REQUESTED` for the canceling side;
+ * - the version is raised above the stored one, since the cancel bumped it and a client
+ *   ignores a ticket whose version it has already seen.
+ */
+private const val SETTLE_FUNCTION = """
+local function settle(storedRaw, payload)
+  local stored = cjson.decode(storedRaw)
+  if stored.cancelRequested ~= true then return payload end
+  local ticket = cjson.decode(payload)
+  if ticket.state == 'QUEUED' then return nil end
+  if ticket.state == 'FAILED' then ticket.state = 'CANCELED'; ticket.reason = 'USER_REQUESTED' end
+  if ticket.version <= stored.version then ticket.version = stored.version + 1 end
+  return cjson.encode(ticket)
+end
+"""
+
 private const val CLAIM_SCRIPT = """
 local first = redis.call('GET', KEYS[2]); local second = redis.call('GET', KEYS[3])
 if not first or not second or cjson.decode(first).state ~= 'QUEUED' or cjson.decode(second).state ~= 'QUEUED' then return 0 end
@@ -259,6 +299,16 @@ redis.call('SET', KEYS[2], ARGV[1]); redis.call('SET', KEYS[3], ARGV[2])
 redis.call('ZREM', KEYS[1], ARGV[3], ARGV[4])
 redis.call('ZADD', KEYS[6], ARGV[5], cjson.decode(ARGV[1]).ticketId, ARGV[5], cjson.decode(ARGV[2]).ticketId)
 redis.call('PUBLISH', KEYS[4], ARGV[1]); redis.call('PUBLISH', KEYS[5], ARGV[2])
+return 1
+"""
+
+private const val CLAIM_SINGLE_SCRIPT = """
+local current = redis.call('GET', KEYS[2])
+if not current or cjson.decode(current).state ~= 'QUEUED' then return 0 end
+redis.call('SET', KEYS[2], ARGV[1])
+redis.call('ZREM', KEYS[1], ARGV[2])
+redis.call('ZADD', KEYS[4], ARGV[3], cjson.decode(ARGV[1]).ticketId)
+redis.call('PUBLISH', KEYS[3], ARGV[1])
 return 1
 """
 
@@ -271,18 +321,20 @@ return 1
  * The active pointer is released by compare-and-delete so a user who already re-queued
  * keeps the newer ticket.
  */
-private const val TRANSITION_SCRIPT = """
+private const val TRANSITION_SCRIPT = """$SETTLE_FUNCTION
 local current = redis.call('GET', KEYS[1])
 if not current or cjson.decode(current).state ~= ARGV[1] then return '' end
-redis.call('SET', KEYS[1], ARGV[2]); redis.call('ZREM', KEYS[3], ARGV[3])
-redis.call('PUBLISH', KEYS[2], ARGV[2])
-if ARGV[5] == 'QUEUED' then redis.call('ZADD', KEYS[4], ARGV[7], ARGV[6]) else redis.call('ZREM', KEYS[4], ARGV[6]) end
-if ARGV[5] == 'MATCHED' then redis.call('ZADD', KEYS[6], ARGV[7], ARGV[3]) else redis.call('ZREM', KEYS[6], ARGV[3]) end
-if ARGV[8] == 'true' then
+local payload = settle(current, ARGV[2]); if not payload then return '' end
+local settled = cjson.decode(payload).state
+redis.call('SET', KEYS[1], payload); redis.call('ZREM', KEYS[3], ARGV[3])
+redis.call('PUBLISH', KEYS[2], payload)
+if settled == 'QUEUED' then redis.call('ZADD', KEYS[4], ARGV[7], ARGV[6]) else redis.call('ZREM', KEYS[4], ARGV[6]) end
+if settled == 'MATCHED' then redis.call('ZADD', KEYS[6], ARGV[7], ARGV[3]) else redis.call('ZREM', KEYS[6], ARGV[3]) end
+if settled == 'CANCELED' or settled == 'EXPIRED' or settled == 'FAILED' then
   redis.call('PEXPIRE', KEYS[1], ARGV[4])
   if redis.call('GET', KEYS[5]) == ARGV[3] then redis.call('DEL', KEYS[5]) end
 end
-return ARGV[2]
+return payload
 """
 
 private const val CANCEL_SCRIPT = """
@@ -294,6 +346,10 @@ if ticket.state == 'QUEUED' then
  ticket.state = 'CANCELED'; ticket.reason = 'USER_REQUESTED'; ticket.version = ticket.version + 1; ticket.updatedAt = ARGV[3]
  local updated = cjson.encode(ticket); redis.call('SET', key, updated); redis.call('ZREM', KEYS[2], ARGV[2]); redis.call('ZREM', KEYS[4], id)
  redis.call('PUBLISH', KEYS[3], updated); redis.call('PEXPIRE', key, ARGV[4]); redis.call('DEL', KEYS[1]); return updated
+end
+if ticket.state == 'ALLOCATING' and ticket.cancelRequested ~= true then
+ ticket.cancelRequested = true; ticket.version = ticket.version + 1; ticket.updatedAt = ARGV[3]
+ local updated = cjson.encode(ticket); redis.call('SET', key, updated); redis.call('PUBLISH', KEYS[3], updated); return updated
 end
 return raw
 """
@@ -307,10 +363,12 @@ return raw
  * The unconditional `SET ... 'PX'` this replaces silently expired `MATCHED` tickets after
  * `terminalTtl`, killing the ticket of any session that ran longer than 30 minutes.
  */
-private const val TRANSITION_PAIR_SCRIPT = """
+private const val TRANSITION_PAIR_SCRIPT = """$SETTLE_FUNCTION
 local first = redis.call('GET', KEYS[1]); local second = redis.call('GET', KEYS[2])
 if not first or not second or cjson.decode(first).state ~= ARGV[1] or cjson.decode(second).state ~= ARGV[1] then return 0 end
-redis.call('SET', KEYS[1], ARGV[2]); redis.call('SET', KEYS[2], ARGV[3])
+local firstPayload = settle(first, ARGV[2]); local secondPayload = settle(second, ARGV[3])
+if not firstPayload or not secondPayload then return 0 end
+redis.call('SET', KEYS[1], firstPayload); redis.call('SET', KEYS[2], secondPayload)
 redis.call('ZREM', KEYS[5], ARGV[4], ARGV[5])
 redis.call('ZREM', KEYS[9], ARGV[8], ARGV[9])
 if ARGV[7] == 'MATCHED' then
@@ -323,6 +381,6 @@ if ARGV[11] == 'true' then
   if redis.call('GET', KEYS[6]) == ARGV[4] then redis.call('DEL', KEYS[6]) end
   if redis.call('GET', KEYS[7]) == ARGV[5] then redis.call('DEL', KEYS[7]) end
 end
-redis.call('PUBLISH', KEYS[3], ARGV[2]); redis.call('PUBLISH', KEYS[4], ARGV[3])
+redis.call('PUBLISH', KEYS[3], firstPayload); redis.call('PUBLISH', KEYS[4], secondPayload)
 return 1
 """

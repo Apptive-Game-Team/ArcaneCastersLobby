@@ -33,6 +33,23 @@ class PublicStatsServiceTest {
     private fun member(name: String) = AccountMemberResponseDto(email = "$name@secret.example", name = name, id = 1)
 
     @Test
+    fun `봇 이름은 계정 조회 없이 사용하고 사용자와 같은 순위에 포함한다`() = runTest {
+        whenever(repository.findRankingCandidates(any(), any())).thenReturn(
+            listOf(
+                RankingCandidate(-1, 1600, 8, 2, 1, botName = "봇"),
+                candidate(1, 1500),
+            ),
+        )
+        whenever(accountClient.getMemberSuspend(1)).thenReturn(member("player"))
+
+        val ranking = service().getRanking()
+
+        assertThat(ranking.players.map { it.rank to it.name }).containsExactly(1 to "봇", 2 to "player")
+        assertThat(ranking.players.first().wins).isEqualTo(8)
+        verify(accountClient, org.mockito.kotlin.never()).getMemberSuspend(-1)
+    }
+
+    @Test
     fun `이름을 못 찾은 플레이어는 건너뛰고 순위를 빈틈없이 다시 매긴다`() = runTest {
         whenever(repository.findRankingCandidates(any(), any()))
             .thenReturn(listOf(candidate(1, 1500), candidate(2, 1400), candidate(3, 1300)))
