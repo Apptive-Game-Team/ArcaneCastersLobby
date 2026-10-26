@@ -15,6 +15,8 @@ data class FriendInviteDto(
     val createdAt: Instant,
     val expiresAt: Instant,
     val matchInfo: MatchedInfoDto? = null,
+    val deliveredAt: Instant? = null,
+    val revision: Long = 1,
 ) {
     companion object {
         fun from(invite: FriendInvite) = FriendInviteDto(
@@ -27,6 +29,8 @@ data class FriendInviteDto(
             createdAt = invite.createdAt,
             expiresAt = invite.expiresAt,
             matchInfo = invite.matchInfo,
+            deliveredAt = invite.deliveredAt,
+            revision = invite.revision,
         )
     }
 }

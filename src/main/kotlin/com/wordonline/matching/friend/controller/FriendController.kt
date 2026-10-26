@@ -10,6 +10,7 @@ import com.wordonline.matching.friend.dto.SendFriendRequestDto
 import com.wordonline.matching.friend.service.FriendEventService
 import com.wordonline.matching.friend.service.FriendInviteService
 import com.wordonline.matching.friend.service.FriendService
+import com.wordonline.matching.friend.service.FriendPresenceService
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import kotlinx.coroutines.flow.Flow
 import org.springframework.http.MediaType
@@ -30,6 +31,7 @@ class FriendController(
     private val friendService: FriendService,
     private val friendInviteService: FriendInviteService,
     private val friendEventService: FriendEventService,
+    private val friendPresenceService: FriendPresenceService,
 ) {
 
     @GetMapping
@@ -131,6 +133,19 @@ class FriendController(
     fun getPendingInvites(@UserId userId: Long?): List<FriendInviteDto> {
         return friendInviteService.getPendingInvites(userId!!)
     }
+
+    @PostMapping("/presence")
+    suspend fun heartbeat(@UserId userId: Long?) {
+        friendPresenceService.heartbeat(userId!!)
+    }
+
+    @GetMapping("/invites/sent")
+    fun getSentInvites(@UserId userId: Long?): List<FriendInviteDto> =
+        friendInviteService.getSentInvites(userId!!)
+
+    @PostMapping("/invites/{inviteId}/received")
+    fun acknowledgeInvite(@UserId userId: Long?, @PathVariable inviteId: String): FriendInviteDto =
+        friendInviteService.acknowledgeInvite(userId!!, inviteId)
 
     @GetMapping("/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun events(
