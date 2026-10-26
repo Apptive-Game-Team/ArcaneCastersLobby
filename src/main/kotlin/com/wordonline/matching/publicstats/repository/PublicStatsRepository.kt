@@ -15,6 +15,7 @@ data class RankingCandidate(
     val wins: Long,
     val losses: Long,
     val draws: Long,
+    val botName: String? = null,
 )
 
 /** Per-magic deck figures from `statistic_game_decks`. */
@@ -28,8 +29,8 @@ data class MagicDeckFigures(
 )
 
 /**
- * Read-only queries behind `/api/public`. Only real users are counted (`id > 0`; bots have negative
- * ids), only `PVP` games, and only outcomes `WIN` or `DRAW`.
+ * 공개 랭킹은 일반 사용자와 활성화된 봇을 포함하고, 마법 통계는 일반 사용자만 집계한다.
+ * 완료된 `PVP` 경기의 `WIN`, `DRAW` 결과만 집계한다.
  *
  * As in [com.wordonline.matching.auth.repository.UserStatisticsRepository], participants come from
  * `statistic_game_sessions` joined to `statistic_games`, because `win_user_id`/`loss_user_id` are
@@ -56,14 +57,15 @@ class PublicStatsRepository(
                 JOIN statistic_games sg ON sg.id = sgs.statistic_game_id
                 WHERE sgs.game_type = 'PVP' AND sg.outcome IN ('WIN', 'DRAW')
             )
-            SELECT u.id AS user_id, u.mmr AS mmr,
+            SELECT u.id AS user_id, u.mmr AS mmr, bp.name AS bot_name,
                 COUNT(*) FILTER (WHERE p.outcome = 'WIN' AND p.win_user_id = u.id) AS wins,
                 COUNT(*) FILTER (WHERE p.outcome = 'WIN' AND p.win_user_id <> u.id) AS losses,
                 COUNT(*) FILTER (WHERE p.outcome = 'DRAW') AS draws
             FROM participants p
             JOIN users u ON u.id = p.user_id
-            WHERE u.id > 0
-            GROUP BY u.id, u.mmr
+            LEFT JOIN bot_personas bp ON bp.user_id = u.id AND u.id < 0
+            WHERE u.id > 0 OR bp.enabled = TRUE
+            GROUP BY u.id, u.mmr, bp.name
             HAVING COUNT(*) >= :minGames
             ORDER BY u.mmr DESC, wins DESC, u.id ASC
             LIMIT :limit
@@ -78,6 +80,7 @@ class PublicStatsRepository(
                     wins = row.get("wins", Number::class.java)!!.toLong(),
                     losses = row.get("losses", Number::class.java)!!.toLong(),
                     draws = row.get("draws", Number::class.java)!!.toLong(),
+                    botName = row.get("bot_name", String::class.java),
                 )
             }
             .all()
