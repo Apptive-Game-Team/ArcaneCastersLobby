@@ -239,4 +239,110 @@ class MatchTicketRepositoryScriptTest {
         assertThat(settled).isEmpty()
         assertThat(sandbox.zmembers(MatchTicketRepository.MATCHED_KEY)).isEmpty()
     }
+
+    private fun stored(ticketId: String): MatchTicket =
+        objectMapper.readValue(sandbox.get("matching:ticket:$ticketId"), MatchTicket::class.java)
+
+    @Test
+    fun `ALLOCATING 중 취소는 cancelRequested 만 기록하고 티켓은 그대로 둔다`() = runTest {
+        seed(ticket("ticket-1", 1L, MatchTicketState.ALLOCATING))
+
+        val result = repository.cancel(1L, "ticket-1")
+
+        assertThat(result?.state).isEqualTo(MatchTicketState.ALLOCATING)
+        assertThat(result?.cancelRequested).isTrue()
+        assertThat(result?.version).isEqualTo(2L)
+        assertThat(stored("ticket-1").cancelRequested).isTrue()
+        assertThat(sandbox.ttlMillis("matching:ticket:ticket-1")).isNull()
+        assertThat(sandbox.get("matching:active:1")).isEqualTo("ticket-1")
+        assertThat(sandbox.published).hasSize(1)
+    }
+
+    @Test
+    fun `cancelRequested 가 없는 옛 티켓 JSON 은 false 로 읽는다`() {
+        val legacy = objectMapper.writeValueAsString(ticket("ticket-1", 1L, MatchTicketState.QUEUED))
+            .replace(""","cancelRequested":false""", "")
+
+        assertThat(legacy).doesNotContain("cancelRequested")
+        assertThat(objectMapper.readValue(legacy, MatchTicket::class.java).cancelRequested).isFalse()
+    }
+
+    @Test
+    fun `취소 요청이 기록된 ALLOCATING 티켓은 QUEUED 전이를 거절한다`() = runTest {
+        val allocating = ticket("ticket-1", 1L, MatchTicketState.ALLOCATING)
+        seed(allocating)
+        repository.cancel(1L, "ticket-1")
+
+        val result = repository.transition(
+            allocating.copy(state = MatchTicketState.QUEUED, version = 2L),
+            MatchTicketState.ALLOCATING,
+        )
+
+        assertThat(result).isNull()
+        assertThat(stored("ticket-1").state).isEqualTo(MatchTicketState.ALLOCATING)
+    }
+
+    @Test
+    fun `취소 요청이 기록된 ALLOCATING 티켓은 CANCELED 로 전이되고 active 포인터를 놓는다`() = runTest {
+        val allocating = ticket("ticket-1", 1L, MatchTicketState.ALLOCATING)
+        seed(allocating)
+        repository.cancel(1L, "ticket-1")
+
+        val result = repository.transition(
+            allocating.copy(state = MatchTicketState.CANCELED, version = 2L, reason = "USER_REQUESTED"),
+            MatchTicketState.ALLOCATING,
+        )
+
+        assertThat(result?.state).isEqualTo(MatchTicketState.CANCELED)
+        assertThat(result?.version).isEqualTo(3L)
+        assertThat(sandbox.get("matching:active:1")).isNull()
+        assertThat(sandbox.ttlMillis("matching:ticket:ticket-1")).isEqualTo(Duration.ofMinutes(30).toMillis())
+    }
+
+    @Test
+    fun `세션 생성 실패 쌍 전이는 취소를 요청한 쪽만 CANCELED 로 기록한다`() = runTest {
+        val first = ticket("ticket-1", 1L, MatchTicketState.ALLOCATING)
+        val second = ticket("ticket-2", 2L, MatchTicketState.ALLOCATING)
+        seed(first)
+        seed(second)
+        repository.cancel(1L, "ticket-1")
+
+        val completed = repository.transitionPair(
+            first.copy(state = MatchTicketState.FAILED, version = 2L, reason = "SESSION_CREATION_FAILED"),
+            second.copy(state = MatchTicketState.FAILED, version = 2L, reason = "SESSION_CREATION_FAILED"),
+            MatchTicketState.ALLOCATING,
+        )
+
+        assertThat(completed).isTrue()
+        assertThat(stored("ticket-1").state).isEqualTo(MatchTicketState.CANCELED)
+        assertThat(stored("ticket-1").reason).isEqualTo("USER_REQUESTED")
+        assertThat(stored("ticket-1").version).isEqualTo(3L)
+        assertThat(stored("ticket-2").state).isEqualTo(MatchTicketState.FAILED)
+        assertThat(stored("ticket-2").reason).isEqualTo("SESSION_CREATION_FAILED")
+        assertThat(sandbox.get("matching:active:1")).isNull()
+        assertThat(sandbox.get("matching:active:2")).isNull()
+    }
+
+    @Test
+    fun `취소 요청이 있어도 세션이 만들어지면 MATCHED 로 전이되고 버전이 앞서간다`() = runTest {
+        val first = ticket("ticket-1", 1L, MatchTicketState.ALLOCATING)
+        val second = ticket("ticket-2", 2L, MatchTicketState.ALLOCATING)
+        seed(first)
+        seed(second)
+        repository.cancel(1L, "ticket-1")
+
+        val completed = repository.transitionPair(
+            first.copy(state = MatchTicketState.MATCHED, version = 2L, matchInfo = matchInfo()),
+            second.copy(state = MatchTicketState.MATCHED, version = 2L, matchInfo = matchInfo()),
+            MatchTicketState.ALLOCATING,
+        )
+
+        assertThat(completed).isTrue()
+        assertThat(stored("ticket-1").state).isEqualTo(MatchTicketState.MATCHED)
+        assertThat(stored("ticket-1").version).isEqualTo(3L)
+        assertThat(stored("ticket-2").version).isEqualTo(2L)
+        assertThat(sandbox.ttlMillis("matching:ticket:ticket-1")).isNull()
+        assertThat(sandbox.zmembers(MatchTicketRepository.MATCHED_KEY))
+            .containsExactlyInAnyOrder("ticket-1", "ticket-2")
+    }
 }
