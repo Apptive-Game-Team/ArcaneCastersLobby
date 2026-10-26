@@ -13,6 +13,8 @@ data class FriendInvite(
     val createdAt: Instant = Instant.now(),
     val expiresAt: Instant,
     val matchInfo: MatchedInfoDto? = null,
+    val deliveredAt: Instant? = null,
+    val revision: Long = 1,
 )
 
 enum class FriendInviteStatus {
