@@ -157,77 +157,161 @@ class GameMatchService(
 
     @Scheduled(fixedRate = 5000)
     fun tryMatching() {
-        scope.launch {
-            recoverExpiredAllocations()
-            expireQueuedTickets()
-            val candidates = matchTicketRepository.findCandidates()
-            if (candidates.size < 2) return@launch
-            val pair = candidates.sortedBy { it.mmr }.zipWithNext().minBy { (left, right) -> right.mmr - left.mmr }
+        scope.launch { runMatchingRound() }
+    }
+
+    internal suspend fun runMatchingRound() {
+        recoverExpiredAllocations()
+        expireQueuedTickets()
+        val candidates = matchTicketRepository.findCandidates()
+        val claimed = if (candidates.size >= 2) matchClosestPair(candidates) else emptySet()
+        val waitedLongEnough = Instant.now(clock).minus(matchTicketProperties.botFallbackAfter)
+        candidates
+            .filter { it.ticketId !in claimed && !it.createdAt.isAfter(waitedLongEnough) }
+            .forEach { matchWithBot(it) }
+    }
+
+    /** Pairs the two closest-MMR candidates and returns the ids of the tickets it tried to claim. */
+    private suspend fun matchClosestPair(candidates: List<MatchTicket>): Set<String> {
+        val pair = candidates.sortedBy { it.mmr }.zipWithNext().minBy { (left, right) -> right.mmr - left.mmr }
+        val claimed = setOf(pair.first.ticketId, pair.second.ticketId)
+        val now = Instant.now(clock)
+        val attemptId = UUID.randomUUID().toString()
+        val leaseUntil = now.plus(matchTicketProperties.allocationLease)
+        val first = pair.first.copy(state = MatchTicketState.ALLOCATING, version = pair.first.version + 1, attemptId = attemptId, allocationLeaseUntil = leaseUntil, updatedAt = now)
+        val second = pair.second.copy(state = MatchTicketState.ALLOCATING, version = pair.second.version + 1, attemptId = attemptId, allocationLeaseUntil = leaseUntil, updatedAt = now)
+        if (!matchTicketRepository.claim(first, second)) return claimed
+
+        val uid1 = first.userId
+        val uid2 = second.userId
+        val sessionId = "session-${matchingQueueRepository.nextSessionId().awaitSingle()}"
+        val sessionDto = SessionDto.from(
+            sessionId,
+            uid1,
+            uid2,
+            first.deckCardIds,
+            second.deckCardIds,
+        )
+
+        try {
+            val placement = legacyGameMatchService.createSession(
+                sessionDto,
+                attemptId,
+                listOf(first.serverPings.orEmpty(), second.serverPings.orEmpty()),
+            )
+            val matchedAt = Instant.now(clock)
+            // The host's boot generation rides on the ticket: it is the only way to tell
+            // later that the process holding this in-memory session was replaced.
+            val completed = matchTicketRepository.transitionPair(
+                first.copy(
+                    state = MatchTicketState.MATCHED,
+                    version = first.version + 1,
+                    matchInfo = placement.matchInfo,
+                    serverId = placement.serverId,
+                    serverInstanceId = placement.serverInstanceId,
+                    allocationLeaseUntil = null,
+                    updatedAt = matchedAt,
+                ),
+                second.copy(
+                    state = MatchTicketState.MATCHED,
+                    version = second.version + 1,
+                    matchInfo = placement.matchInfo,
+                    serverId = placement.serverId,
+                    serverInstanceId = placement.serverInstanceId,
+                    allocationLeaseUntil = null,
+                    updatedAt = matchedAt,
+                ),
+                MatchTicketState.ALLOCATING,
+            )
+            check(completed) { "Match tickets changed before completion: attemptId=$attemptId" }
+            log.info("Users matched: uid1={}, uid2={}, sessionId={}", uid1, uid2, sessionId)
+            userService.markPlaying(uid1).awaitSingleOrNull()
+            userService.markPlaying(uid2).awaitSingleOrNull()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("Failed to create matched session: uid1={}, uid2={}, sessionId={}", uid1, uid2, sessionId, e)
+            val failedAt = Instant.now(clock)
+            matchTicketRepository.transitionPair(
+                first.copy(state = MatchTicketState.FAILED, version = first.version + 1, reason = "SESSION_CREATION_FAILED", allocationLeaseUntil = null, updatedAt = failedAt),
+                second.copy(state = MatchTicketState.FAILED, version = second.version + 1, reason = "SESSION_CREATION_FAILED", allocationLeaseUntil = null, updatedAt = failedAt),
+                MatchTicketState.ALLOCATING,
+            )
+            userService.markOnline(uid1).awaitSingleOrNull()
+            userService.markOnline(uid2).awaitSingleOrNull()
+        }
+        return claimed
+    }
+
+    /**
+     * Matches a ticket that waited past [MatchTicketProperties.botFallbackAfter] with a bot near
+     * its MMR. The session is `PVP` rather than practice so the game server rates both sides.
+     * The bot is picked before the claim: with no bot available the ticket just keeps waiting.
+     */
+    private suspend fun matchWithBot(ticket: MatchTicket) {
+        try {
+            val botId = try {
+                botMemberMaker.getPracticeBotIdNear(ticket.mmr)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("No bot available for fallback match: userId={}", ticket.userId, e)
+                return
+            }
             val now = Instant.now(clock)
             val attemptId = UUID.randomUUID().toString()
-            val leaseUntil = now.plus(matchTicketProperties.allocationLease)
-            val first = pair.first.copy(state = MatchTicketState.ALLOCATING, version = pair.first.version + 1, attemptId = attemptId, allocationLeaseUntil = leaseUntil, updatedAt = now)
-            val second = pair.second.copy(state = MatchTicketState.ALLOCATING, version = pair.second.version + 1, attemptId = attemptId, allocationLeaseUntil = leaseUntil, updatedAt = now)
-            if (!matchTicketRepository.claim(first, second)) return@launch
-
-            val uid1 = first.userId
-            val uid2 = second.userId
-            val sessionId = "session-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-            val sessionDto = SessionDto.from(
-                sessionId,
-                uid1,
-                uid2,
-                first.deckCardIds,
-                second.deckCardIds,
+            val claiming = ticket.copy(
+                state = MatchTicketState.ALLOCATING,
+                version = ticket.version + 1,
+                attemptId = attemptId,
+                allocationLeaseUntil = now.plus(matchTicketProperties.allocationLease),
+                updatedAt = now,
             )
+            if (!matchTicketRepository.claim(claiming)) return
 
+            val sessionId = "session-${matchingQueueRepository.nextSessionId().awaitSingle()}"
+            val sessionDto = SessionDto.PVP(sessionId, ticket.userId, botId, claiming.deckCardIds, null)
             try {
                 val placement = legacyGameMatchService.createSession(
                     sessionDto,
                     attemptId,
-                    listOf(first.serverPings.orEmpty(), second.serverPings.orEmpty()),
+                    listOf(claiming.serverPings.orEmpty()),
                 )
-                val matchedAt = Instant.now(clock)
-                // The host's boot generation rides on the ticket: it is the only way to tell
-                // later that the process holding this in-memory session was replaced.
-                val completed = matchTicketRepository.transitionPair(
-                    first.copy(
+                val matched = matchTicketRepository.transition(
+                    claiming.copy(
                         state = MatchTicketState.MATCHED,
-                        version = first.version + 1,
+                        version = claiming.version + 1,
                         matchInfo = placement.matchInfo,
                         serverId = placement.serverId,
                         serverInstanceId = placement.serverInstanceId,
                         allocationLeaseUntil = null,
-                        updatedAt = matchedAt,
-                    ),
-                    second.copy(
-                        state = MatchTicketState.MATCHED,
-                        version = second.version + 1,
-                        matchInfo = placement.matchInfo,
-                        serverId = placement.serverId,
-                        serverInstanceId = placement.serverInstanceId,
-                        allocationLeaseUntil = null,
-                        updatedAt = matchedAt,
+                        updatedAt = Instant.now(clock),
                     ),
                     MatchTicketState.ALLOCATING,
                 )
-                check(completed) { "Match tickets changed before completion: attemptId=$attemptId" }
-                log.info("Users matched: uid1={}, uid2={}, sessionId={}", uid1, uid2, sessionId)
-                userService.markPlaying(uid1).awaitSingleOrNull()
-                userService.markPlaying(uid2).awaitSingleOrNull()
+                checkNotNull(matched) { "Match ticket changed before completion: attemptId=$attemptId" }
+                log.info("User matched with bot after waiting: userId={}, botId={}, sessionId={}", ticket.userId, botId, sessionId)
+                userService.markPlaying(ticket.userId).awaitSingleOrNull()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                log.error("Failed to create matched session: uid1={}, uid2={}, sessionId={}", uid1, uid2, sessionId, e)
-                val failedAt = Instant.now(clock)
-                matchTicketRepository.transitionPair(
-                    first.copy(state = MatchTicketState.FAILED, version = first.version + 1, reason = "SESSION_CREATION_FAILED", allocationLeaseUntil = null, updatedAt = failedAt),
-                    second.copy(state = MatchTicketState.FAILED, version = second.version + 1, reason = "SESSION_CREATION_FAILED", allocationLeaseUntil = null, updatedAt = failedAt),
+                log.error("Failed to create bot fallback session: userId={}, botId={}, sessionId={}", ticket.userId, botId, sessionId, e)
+                matchTicketRepository.transition(
+                    claiming.copy(
+                        state = MatchTicketState.FAILED,
+                        version = claiming.version + 1,
+                        reason = "SESSION_CREATION_FAILED",
+                        allocationLeaseUntil = null,
+                        updatedAt = Instant.now(clock),
+                    ),
                     MatchTicketState.ALLOCATING,
                 )
-                userService.markOnline(uid1).awaitSingleOrNull()
-                userService.markOnline(uid2).awaitSingleOrNull()
+                userService.markOnline(ticket.userId).awaitSingleOrNull()
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("Bot fallback matching failed: userId={}", ticket.userId, e)
         }
     }
 

@@ -60,6 +60,26 @@ class MatchTicketRepositoryScriptTest {
     }
 
     @Test
+    fun `단일 claim 은 QUEUED 티켓을 한 번만 ALLOCATING 으로 옮기고 lease 를 건다`() = runTest {
+        val queued = ticket("ticket-1", 1L, MatchTicketState.QUEUED)
+        seed(queued)
+        sandbox.zadd("matching:queue", "1", 1.0)
+        val claiming = queued.copy(
+            state = MatchTicketState.ALLOCATING,
+            version = 2L,
+            allocationLeaseUntil = matchedAt.plusSeconds(30),
+        )
+
+        assertThat(repository.claim(claiming)).isTrue()
+        assertThat(sandbox.zmembers("matching:queue")).isEmpty()
+        assertThat(sandbox.zscore("matching:allocation-leases", "ticket-1"))
+            .isEqualTo(matchedAt.plusSeconds(30).toEpochMilli().toDouble())
+        assertThat(repository.getActive(1L)?.state).isEqualTo(MatchTicketState.ALLOCATING)
+
+        assertThat(repository.claim(claiming)).`as`("이미 ALLOCATING 인 티켓은 다시 claim 되면 안 된다").isFalse()
+    }
+
+    @Test
     fun `MATCHED 전이는 티켓에 만료를 걸지 않는다`() = runTest {
         val first = ticket("ticket-1", 1L, MatchTicketState.ALLOCATING)
         val second = ticket("ticket-2", 2L, MatchTicketState.ALLOCATING)
