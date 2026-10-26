@@ -36,6 +36,7 @@ class GameMatchServiceBotFallbackTest {
     private val matchTicketRepository: MatchTicketRepository = mock()
 
     private val service = GameMatchService(
+        mock<PracticeOpponentSelector>(),
         botMemberMaker,
         legacyGameMatchService,
         userService,
@@ -107,6 +108,8 @@ class GameMatchServiceBotFallbackTest {
         verify(matchTicketRepository).transition(matched.capture(), eq(MatchTicketState.ALLOCATING))
         assertThat(matched.firstValue.state).isEqualTo(MatchTicketState.MATCHED)
         verify(userService).markPlaying(1L)
+        verify(botMemberMaker).getPracticeBotIdNear(1000L)
+        verify(botMemberMaker, never()).getHospitalityBotId()
     }
 
     @Test

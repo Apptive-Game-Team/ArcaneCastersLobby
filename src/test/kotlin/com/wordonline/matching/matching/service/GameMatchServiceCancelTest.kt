@@ -42,6 +42,7 @@ class GameMatchServiceCancelTest {
     private val now = Instant.now()
 
     private val service = GameMatchService(
+        practiceOpponentSelector = mock(),
         botMemberMaker = mock(),
         legacyGameMatchService = legacyGameMatchService,
         userService = userService,
