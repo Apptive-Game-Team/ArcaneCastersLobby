@@ -151,6 +151,12 @@ class FriendInviteService(
 
         val updated = finishPending(inviteId, FriendInviteStatus.REJECTED)
         val dto = FriendInviteDto.from(updated)
+        if (updated.status == FriendInviteStatus.EXPIRED) {
+            val event = FriendEvent(FriendEventType.FRIEND_INVITE_EXPIRED, invite = dto)
+            friendEventService.publish(updated.inviterId, event)
+            friendEventService.publish(updated.inviteeId, event)
+            return dto
+        }
 
         friendEventService.publish(
             invite.inviterId,
@@ -174,6 +180,12 @@ class FriendInviteService(
 
         val updated = finishPending(inviteId, FriendInviteStatus.CANCELED)
         val dto = FriendInviteDto.from(updated)
+        if (updated.status == FriendInviteStatus.EXPIRED) {
+            val event = FriendEvent(FriendEventType.FRIEND_INVITE_EXPIRED, invite = dto)
+            friendEventService.publish(updated.inviterId, event)
+            friendEventService.publish(updated.inviteeId, event)
+            return dto
+        }
 
         friendEventService.publish(
             invite.inviteeId,

@@ -1,6 +1,9 @@
 package com.wordonline.matching.friend.service
 
 import com.wordonline.matching.deck.service.DeckService
+import com.wordonline.matching.friend.domain.FriendInvite
+import com.wordonline.matching.friend.domain.FriendEventType
+import java.time.Instant
 import com.wordonline.matching.friend.domain.FriendInviteStatus
 import com.wordonline.matching.friend.repository.FriendRepository
 import com.wordonline.matching.matching.client.AccountClient
@@ -77,5 +80,38 @@ class FriendInviteServiceTest {
         assertThat(accepted.deliveredAt).isNotNull()
         assertThat(accepted.revision).isEqualTo(3)
         assertThrows<IllegalStateException> { service.cancelInvite(1, id) }
+    }
+
+    private suspend fun expiredInvite(): String {
+        val id = createInvite()
+        val field = FriendInviteService::class.java.getDeclaredField("invites")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val stored = field.get(service) as MutableMap<String, FriendInvite>
+        stored[id] = stored.getValue(id).copy(expiresAt = Instant.now().minusSeconds(1))
+        clearInvocations(events)
+        return id
+    }
+
+    @Test
+    fun `만료 초대 취소는 양쪽에 만료 이벤트만 보낸다`(): Unit = runTest {
+        val id = expiredInvite()
+        val result = service.cancelInvite(1, id)
+        assertThat(result.status).isEqualTo(FriendInviteStatus.EXPIRED)
+        verify(events).publish(eq(1L), argThat { type == FriendEventType.FRIEND_INVITE_EXPIRED && invite?.inviteId == id })
+        verify(events).publish(eq(2L), argThat { type == FriendEventType.FRIEND_INVITE_EXPIRED && invite?.inviteId == id })
+        service.getSentInvites(1)
+        verifyNoMoreInteractions(events)
+    }
+
+    @Test
+    fun `만료 초대 거절은 양쪽에 만료 이벤트만 보낸다`(): Unit = runTest {
+        val id = expiredInvite()
+        val result = service.rejectInvite(2, id)
+        assertThat(result.status).isEqualTo(FriendInviteStatus.EXPIRED)
+        verify(events).publish(eq(1L), argThat { type == FriendEventType.FRIEND_INVITE_EXPIRED && invite?.inviteId == id })
+        verify(events).publish(eq(2L), argThat { type == FriendEventType.FRIEND_INVITE_EXPIRED && invite?.inviteId == id })
+        service.getPendingInvites(2)
+        verifyNoMoreInteractions(events)
     }
 }

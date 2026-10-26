@@ -140,11 +140,11 @@ class FriendController(
     }
 
     @GetMapping("/invites/sent")
-    fun getSentInvites(@UserId userId: Long?): List<FriendInviteDto> =
+    suspend fun getSentInvites(@UserId userId: Long?): List<FriendInviteDto> =
         friendInviteService.getSentInvites(userId!!)
 
     @PostMapping("/invites/{inviteId}/received")
-    fun acknowledgeInvite(@UserId userId: Long?, @PathVariable inviteId: String): FriendInviteDto =
+    suspend fun acknowledgeInvite(@UserId userId: Long?, @PathVariable inviteId: String): FriendInviteDto =
         friendInviteService.acknowledgeInvite(userId!!, inviteId)
 
     @GetMapping("/events", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
