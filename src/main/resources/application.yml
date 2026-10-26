@@ -97,6 +97,10 @@ gameserver:
   # One success restores it immediately.
   failure-threshold: ${GAMESERVER_FAILURE_THRESHOLD:3}
 
+# Administrator playground enabled by default; false removes its routes.
+playground:
+  enabled: ${PLAYGROUND_ENABLED:true}
+  
 # Bound to LocalServerProperties. The local server bundle announced by GET /api/offline-pack.
 # An empty version announces no bundle (localServer: null); an empty minimum-version means version.
 local-server:
