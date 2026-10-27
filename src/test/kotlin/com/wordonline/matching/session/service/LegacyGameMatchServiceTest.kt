@@ -27,6 +27,12 @@ import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Mono
 
 class LegacyGameMatchServiceTest {
+    @org.junit.jupiter.api.io.TempDir lateinit var directory: java.nio.file.Path
+    private var learnedBots = com.wordonline.matching.matching.service.LearnedBotAvailability(
+        WebClient.builder(), mock(),
+        com.wordonline.matching.matching.config.LearnedBotProperties(),
+        com.fasterxml.jackson.databind.ObjectMapper(),
+    )
 
     /**
      * Default `callUrl` mirrors [Server.callUrl] (internal address when set, public otherwise) so
@@ -55,6 +61,7 @@ class LegacyGameMatchServiceTest {
             localizationService,
             userService,
             gameServerManagementService,
+            learnedBots,
         )
     }
 
@@ -82,6 +89,62 @@ class LegacyGameMatchServiceTest {
     }
 
     private val sessionDto = SessionDto.PVP("session-1", 1L, 2L)
+
+    private fun modelsOnServers(models: Map<String, String>) {
+        val file = directory.resolve("game-config.json")
+        java.nio.file.Files.writeString(file, """{"assignments":{"-7":"test-v9","-8":"test-v10"}}""")
+        learnedBots = com.wordonline.matching.matching.service.LearnedBotAvailability(
+            WebClient.builder().exchangeFunction { request ->
+                Mono.just(ClientResponse.create(HttpStatus.OK)
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .body(models[request.url().host] ?: "{}").build())
+            }, gameServerManagementService,
+            com.wordonline.matching.matching.config.LearnedBotProperties(config = file.toString()),
+            com.fasterxml.jackson.databind.ObjectMapper(),
+        )
+    }
+
+    @Test
+    fun `핑이 더 좋아도 모델이 없는 서버를 건너뛰고 연결된 서버에만 배치한다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers())
+            .thenReturn(listOf(server(1L, "alpha"), server(2L, "beta")))
+        modelsOnServers(mapOf("beta" to """{"-7":"test-v9"}"""))
+        assertThat(learnedBots.unavailableBotIds()).doesNotContain(-7L)
+        val placement = service { readyResponse(true) }.createSession(
+            SessionDto.Practice("session-1", 1L, -7L), "attempt-1",
+            listOf(mapOf(1L to 10L, 2L to 100L)),
+        )
+        assertThat(sentRequests.map { it.url().host }).containsExactly("beta")
+        assertThat(placement.serverId).isEqualTo(2L)
+    }
+
+    @Test
+    fun `두 모델이 서로 다른 서버에만 있으면 한 경기를 배치하지 않는다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers())
+            .thenReturn(listOf(server(1L, "alpha"), server(2L, "beta")))
+        modelsOnServers(mapOf("alpha" to """{"-7":"test-v9"}""", "beta" to """{"-8":"test-v10"}"""))
+        assertThat(learnedBots.unavailableBotIds()).isEmpty()
+        val failure = runCatching {
+            service { readyResponse(true) }.createSession(SessionDto.Practice("session-1", -7L, -8L), "attempt-1")
+        }.exceptionOrNull()
+        assertThat(failure).isInstanceOf(NoAvailableGameServerException::class.java)
+        assertThat(sentRequests).isEmpty()
+    }
+
+    @Test
+    fun `모델이 준비되지 않으면 지정 봇 매칭도 생성 요청을 보내지 않는다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+        learnedBots = mock()
+        whenever(learnedBots.permits(any(), any())).thenReturn(false)
+        val failure = runCatching {
+            service { readyResponse(true) }.createSession(SessionDto.Practice("session-1", 1L, -7L))
+        }.exceptionOrNull()
+        assertThat(failure).isInstanceOf(NoAvailableGameServerException::class.java)
+        assertThat(sentRequests).isEmpty()
+    }
 
     @Test
     fun `두 참가자의 최대 핑이 낮은 서버에 먼저 세션을 요청한다`() = runTest {
@@ -152,7 +215,7 @@ class LegacyGameMatchServiceTest {
             }
         }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, learnedBots,
         )
 
         val matched = service.createSession(sessionDto, "attempt-1")
@@ -276,7 +339,7 @@ class LegacyGameMatchServiceTest {
             else Mono.just(readyResponse(true))
         }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, learnedBots,
         )
 
         val matched = service.createSession(sessionDto, "attempt-1")
@@ -371,7 +434,7 @@ class LegacyGameMatchServiceTest {
 
         val builder = WebClient.builder().exchangeFunction { Mono.error(IllegalStateException("unreachable")) }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, learnedBots,
         )
 
         val error = runCatching { service.getMatchInfo(1L) }.exceptionOrNull()

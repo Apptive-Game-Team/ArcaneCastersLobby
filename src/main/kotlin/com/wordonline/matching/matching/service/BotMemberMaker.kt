@@ -13,14 +13,22 @@ import reactor.core.publisher.Mono
 class BotMemberMaker(
     private val botPersonaRepository: BotPersonaRepository,
     private val practiceMatchProperties: PracticeMatchProperties,
+    private val learnedBots: LearnedBotAvailability,
 ) {
 
     // Bot ratings move with every practice result while the player's stays put, so a bot's MMR is
     // how strong it has proven against players. Drawing from the few nearest keeps the opponent
     // close to the player's level without handing the same player the same bot every time.
     suspend fun getPracticeBotIdNear(mmr: Long): Long {
+        return pickNear(mmr, learnedBots.unavailableBotIds())
+    }
+
+    suspend fun getLocalPracticeBotIdNear(mmr: Long): Long = pickNear(mmr, learnedBots.assignedBotIds())
+
+    private suspend fun pickNear(mmr: Long, excludedIds: List<Long>): Long {
+        val excluded = excludedIds.ifEmpty { listOf(0L) }
         val nearest = botPersonaRepository
-            .findNearestMatchable(mmr, practiceMatchProperties.nearestBotCount.coerceAtLeast(1))
+            .findNearestMatchable(mmr, practiceMatchProperties.nearestBotCount.coerceAtLeast(1), excluded)
             .asFlow()
             .toList()
         check(nearest.isNotEmpty()) { "No enabled bot persona is available." }
@@ -30,6 +38,10 @@ class BotMemberMaker(
     fun getHospitalityBotId(): Mono<Long> = botPersonaRepository.findHospitality()
         .map(BotPersona::userId)
         .switchIfEmpty(Mono.error(IllegalStateException("No hospitality bot persona is available.")))
+
+    fun getLocalHospitalityBotId(): Mono<Long> = getHospitalityBotId()
+        .filter { it !in learnedBots.assignedBotIds() }
+        .switchIfEmpty(Mono.error(IllegalStateException("No local hospitality bot persona is available.")))
 
     fun getBot(botId: Long): Mono<AccountMemberResponseDto> {
         require(botId < 0) { "Bot user ID must be negative." }
