@@ -13,14 +13,16 @@ import reactor.core.publisher.Mono
 class BotMemberMaker(
     private val botPersonaRepository: BotPersonaRepository,
     private val practiceMatchProperties: PracticeMatchProperties,
+    private val learnedBots: LearnedBotAvailability,
 ) {
 
     // Bot ratings move with every practice result while the player's stays put, so a bot's MMR is
     // how strong it has proven against players. Drawing from the few nearest keeps the opponent
     // close to the player's level without handing the same player the same bot every time.
     suspend fun getPracticeBotIdNear(mmr: Long): Long {
+        val excluded = learnedBots.unavailableBotIds().ifEmpty { listOf(0L) }
         val nearest = botPersonaRepository
-            .findNearestMatchable(mmr, practiceMatchProperties.nearestBotCount.coerceAtLeast(1))
+            .findNearestMatchable(mmr, practiceMatchProperties.nearestBotCount.coerceAtLeast(1), excluded)
             .asFlow()
             .toList()
         check(nearest.isNotEmpty()) { "No enabled bot persona is available." }

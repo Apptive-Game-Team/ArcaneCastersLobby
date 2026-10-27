@@ -27,6 +27,11 @@ import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Mono
 
 class LegacyGameMatchServiceTest {
+    private var learnedBots = com.wordonline.matching.matching.service.LearnedBotAvailability(
+        WebClient.builder(), mock(),
+        com.wordonline.matching.matching.config.LearnedBotProperties(),
+        com.fasterxml.jackson.databind.ObjectMapper(),
+    )
 
     /**
      * Default `callUrl` mirrors [Server.callUrl] (internal address when set, public otherwise) so
@@ -55,6 +60,7 @@ class LegacyGameMatchServiceTest {
             localizationService,
             userService,
             gameServerManagementService,
+            learnedBots,
         )
     }
 
@@ -82,6 +88,19 @@ class LegacyGameMatchServiceTest {
     }
 
     private val sessionDto = SessionDto.PVP("session-1", 1L, 2L)
+
+    @Test
+    fun `모델이 준비되지 않으면 지정 봇 매칭도 생성 요청을 보내지 않는다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+        learnedBots = mock()
+        whenever(learnedBots.permits(any(), any())).thenReturn(false)
+        val failure = runCatching {
+            service { readyResponse(true) }.createSession(SessionDto.Practice("session-1", 1L, -7L))
+        }.exceptionOrNull()
+        assertThat(failure).isInstanceOf(NoAvailableGameServerException::class.java)
+        assertThat(sentRequests).isEmpty()
+    }
 
     @Test
     fun `두 참가자의 최대 핑이 낮은 서버에 먼저 세션을 요청한다`() = runTest {
@@ -152,7 +171,7 @@ class LegacyGameMatchServiceTest {
             }
         }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, learnedBots,
         )
 
         val matched = service.createSession(sessionDto, "attempt-1")
@@ -276,7 +295,7 @@ class LegacyGameMatchServiceTest {
             else Mono.just(readyResponse(true))
         }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, learnedBots,
         )
 
         val matched = service.createSession(sessionDto, "attempt-1")
@@ -371,7 +390,7 @@ class LegacyGameMatchServiceTest {
 
         val builder = WebClient.builder().exchangeFunction { Mono.error(IllegalStateException("unreachable")) }
         val service = LegacyGameMatchService(
-            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService,
+            builder, sessionRecoveryStore, localizationService, userService, gameServerManagementService, learnedBots,
         )
 
         val error = runCatching { service.getMatchInfo(1L) }.exceptionOrNull()

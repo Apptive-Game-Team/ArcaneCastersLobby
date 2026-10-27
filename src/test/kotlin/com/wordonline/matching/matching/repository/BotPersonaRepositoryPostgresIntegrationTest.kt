@@ -130,6 +130,9 @@ class BotPersonaRepositoryPostgresIntegrationTest {
 
         assertThat(nearTwelveHundred.map { it.userId }).containsExactly(-2L, -4L)
         assertThat(nearThousand.map { it.userId }).containsExactly(-5L)
+        val withoutModels = botPersonaRepository.findNearestMatchable(1200, 1, listOf(-2, -4))
+            .collectList().awaitSingle()
+        assertThat(withoutModels.map { it.userId }).containsExactly(-5L)
     }
 
     companion object {

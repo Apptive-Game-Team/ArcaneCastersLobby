@@ -41,11 +41,12 @@ interface BotPersonaRepository : R2dbcRepository<BotPersona, Long> {
         FROM bot_personas bp
         LEFT JOIN users u ON u.id = bp.user_id
         WHERE $MATCHABLE_BOT_PERSONA_CONDITION
+          AND bp.user_id NOT IN (:excludedIds)
         ORDER BY ABS(COALESCE(u.mmr, 1000) - :mmr), RANDOM()
         LIMIT :limit
         """
     )
-    fun findNearestMatchable(mmr: Long, limit: Int): Flux<BotPersona>
+    fun findNearestMatchable(mmr: Long, limit: Int, excludedIds: List<Long> = listOf(0L)): Flux<BotPersona>
 
     @Query(
         """
