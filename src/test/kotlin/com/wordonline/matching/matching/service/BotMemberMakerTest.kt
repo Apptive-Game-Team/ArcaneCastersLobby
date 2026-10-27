@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -94,6 +95,20 @@ class BotMemberMakerTest {
         assertThat(failureOf { botMemberMaker.getPracticeBotIdNear(1000L) })
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("No enabled bot persona")
+    }
+
+    @Test
+    fun `로컬에서는 원격 준비 상태를 조회하지 않고 지정 모델 봇을 모두 제외한다`() = runTest {
+        val availability: LearnedBotAvailability = mock()
+        whenever(availability.assignedBotIds()).thenReturn(listOf(-12L, -14L))
+        whenever(botPersonaRepository.findNearestMatchable(1000L, 3, listOf(-12L, -14L)))
+            .thenReturn(Flux.just(BotPersona(-13L, "rule", true, false)))
+        val maker = BotMemberMaker(botPersonaRepository, PracticeMatchProperties(nearestBotCount = 3), availability)
+        assertThat(maker.getLocalPracticeBotIdNear(1000L)).isEqualTo(-13L)
+        verify(availability, never()).unavailableBotIds()
+        whenever(botPersonaRepository.findHospitality()).thenReturn(Mono.just(BotPersona(-12L, "model", true, true)))
+        assertThat(failureOf { maker.getLocalHospitalityBotId().awaitSingle() })
+            .isInstanceOf(IllegalStateException::class.java)
     }
 
     @Test

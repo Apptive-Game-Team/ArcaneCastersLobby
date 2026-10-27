@@ -48,6 +48,8 @@ class LearnedBotAvailability(
         assignments.filter { (id, version) -> ready.none { it[id] == version } }.keys.toList()
     }
 
+    fun assignedBotIds(): List<Long> = assignments.keys.toList()
+
     suspend fun permits(serverUrl: String, ids: List<Long>): Boolean {
         val required = assignments.filterKeys { it in ids }
         if (required.isEmpty()) return true
