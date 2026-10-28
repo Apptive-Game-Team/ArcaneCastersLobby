@@ -11,6 +11,8 @@ data class MatchedInfoDto @JvmOverloads constructor(
     val sessionId: String,
     val webSocketUrl: String? = null,
     val type: String = "matchedInfoDto",
+    val lockstepSimulationVersion: String? = null,
+    val mapType: String? = null,
 ) {
     constructor(
         sessionInfo: SessionRecoveryInfo,
@@ -22,6 +24,8 @@ data class MatchedInfoDto @JvmOverloads constructor(
         leftUser = leftUser,
         rightUser = rightUser,
         sessionId = sessionInfo.sessionId(),
-        webSocketUrl = null,
+        webSocketUrl = sessionInfo.webSocketUrl(),
+        lockstepSimulationVersion = sessionInfo.lockstepSimulationVersion(),
+        mapType = sessionInfo.mapType(),
     )
 }

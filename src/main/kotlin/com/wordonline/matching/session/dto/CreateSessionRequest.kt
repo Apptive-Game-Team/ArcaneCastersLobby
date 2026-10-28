@@ -37,4 +37,6 @@ data class SessionReadyResponse(
      * liveness from the session query alone.
      */
     val instanceId: String? = null,
+    val lockstepSimulationVersion: String? = null,
+    val mapType: String? = null,
 )

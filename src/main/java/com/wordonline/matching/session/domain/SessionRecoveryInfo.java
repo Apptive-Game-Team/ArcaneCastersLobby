@@ -9,10 +9,17 @@ public record SessionRecoveryInfo(
         long rightUserId,
         String sessionId,
         String serverUrl,
-        long expireAt
+        long expireAt,
+        String webSocketUrl,
+        String lockstepSimulationVersion,
+        String mapType
 ) {
 
     private final static long TTL = 5 * 60 * 1000;
+
+    public SessionRecoveryInfo(long leftUserId, long rightUserId, String sessionId, String serverUrl, long expireAt) {
+        this(leftUserId, rightUserId, sessionId, serverUrl, expireAt, null, null, null);
+    }
 
     public SessionRecoveryInfo(MatchedInfoDto matchedInfoDto) {
         this(
@@ -20,7 +27,10 @@ public record SessionRecoveryInfo(
                 matchedInfoDto.getRightUser().id(),
                 matchedInfoDto.getSessionId(),
                 matchedInfoDto.getServer(),
-                System.currentTimeMillis() + TTL
+                System.currentTimeMillis() + TTL,
+                matchedInfoDto.getWebSocketUrl(),
+                matchedInfoDto.getLockstepSimulationVersion(),
+                matchedInfoDto.getMapType()
         );
     }
 

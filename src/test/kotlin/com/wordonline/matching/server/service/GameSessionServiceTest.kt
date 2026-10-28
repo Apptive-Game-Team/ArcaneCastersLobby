@@ -28,6 +28,17 @@ import java.time.Instant
  * to the Unity client, which cannot reach the docker network.
  */
 class GameSessionServiceTest {
+    @Test
+    fun `구형 방 응답은 새 필드 없이 읽고 신규 방 응답은 맵과 lockstep 버전을 보존한다`() {
+        val mapper = com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+        val legacy = mapper.readValue("""{"sessionId":"old","leftUserId":1,"rightUserId":2,"serverUrl":"http://local","createdAt":"2026-10-27T00:00:00Z"}""", RoomInfoDto::class.java)
+        assertThat(legacy.mapType()).isNull()
+        assertThat(legacy.lockstepSimulationVersion()).isNull()
+        val current = mapper.readValue("""{"sessionId":"new","mapType":"FUTURE_MAP","lockstepSimulationVersion":"lockstep-v1"}""", RoomInfoDto::class.java)
+        val restored = mapper.readValue(mapper.writeValueAsString(current), RoomInfoDto::class.java)
+        assertThat(restored.mapType()).isEqualTo("FUTURE_MAP")
+        assertThat(restored.lockstepSimulationVersion()).isEqualTo("lockstep-v1")
+    }
 
     private val serverRepository: ServerRepository = mock()
     private val gameServerClient: GameServerClient = mock()
@@ -50,7 +61,7 @@ class GameSessionServiceTest {
     }
 
     private fun room(serverUrl: String) = RoomListDto(
-        listOf(RoomInfoDto("session-1", 1L, 2L, serverUrl, Instant.now())),
+        listOf(RoomInfoDto("session-1", 1L, 2L, serverUrl, Instant.now(), "RIVER", "lockstep-v1")),
     )
 
     @Test
@@ -67,6 +78,8 @@ class GameSessionServiceTest {
         assertThat(result.rooms().map { it.serverUrl() })
             .`as`("클라이언트로 나가는 RoomInfoDto.serverUrl은 항상 공개 주소여야 한다")
             .containsExactly(publicUrl)
+        assertThat(result.rooms().single().mapType()).isEqualTo("RIVER")
+        assertThat(result.rooms().single().lockstepSimulationVersion()).isEqualTo("lockstep-v1")
     }
 
     @Test

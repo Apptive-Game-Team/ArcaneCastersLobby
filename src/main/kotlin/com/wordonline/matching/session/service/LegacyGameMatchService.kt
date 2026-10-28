@@ -14,6 +14,8 @@ import com.wordonline.matching.session.domain.SessionRecoveryInfo
 import com.wordonline.matching.session.dto.SimpleBooleanDto
 import com.wordonline.matching.session.dto.CreateSessionRequest
 import com.wordonline.matching.session.dto.SessionReadyResponse
+import com.wordonline.matching.session.config.LockstepProperties
+import com.wordonline.matching.matching.dto.SessionType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -38,6 +40,7 @@ class LegacyGameMatchService(
     private val localizationService: LocalizationService,
     private val userService: UserService,
     private val gameServerManagementService: GameServerManagementService,
+    private val lockstepProperties: LockstepProperties = LockstepProperties(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -79,6 +82,8 @@ class LegacyGameMatchService(
                 rightUser,
                 sessionDto.sessionId,
                 ready.webSocketUrl,
+                lockstepSimulationVersion = ready.lockstepSimulationVersion,
+                mapType = ready.mapType,
             )
             sessionRecoveryStore.storeMatchInfo(matchedInfo).awaitSingleOrNull()
             return SessionPlacement(matchedInfo, server.id, ready.instanceId)
@@ -147,10 +152,27 @@ class LegacyGameMatchService(
         }
     }
 
-    private suspend fun requestSession(url: String, sessionDto: SessionDto, attemptId: String): SessionReadyResponse =
+    private suspend fun requestSession(url: String, sessionDto: SessionDto, attemptId: String): SessionReadyResponse {
+        if (lockstepProperties.enabled && (sessionDto.uid1 > 0 || (sessionDto.uid2 ?: 0) > 0)) {
+            val response = webClientBuilder.clone().baseUrl(url).build().post()
+                .uri("/api/server/lockstep-matches")
+                .bodyValue(mapOf(
+                    "attemptId" to attemptId, "sessionId" to sessionDto.sessionId,
+                    "participants" to listOf(sessionDto.uid1, sessionDto.uid2 ?: -1L),
+                    "simulationVersion" to lockstepProperties.simulationVersion,
+                    "sessionType" to sessionDto.sessionType, "scenarioId" to sessionDto.scenarioId,
+                    "leftDeck" to sessionDto.leftDeckCardIds, "rightDeck" to sessionDto.rightDeckCardIds,
+                ))
+                .accept(MediaType.APPLICATION_JSON).retrieve()
+                .bodyToMono(SessionReadyResponse::class.java).awaitSingle()
+            check(response.lockstepSimulationVersion == lockstepProperties.simulationVersion) {
+                "Lockstep simulation version mismatch"
+            }
+            return response
+        }
         // clone() first: baseUrl() mutates the shared builder, and session offers run concurrently
         // across candidate servers. See GameServerClient for the failure this prevents.
-        webClientBuilder.clone().baseUrl(url).build()
+        return webClientBuilder.clone().baseUrl(url).build()
             .post()
             .uri("/api/server/game-sessions")
             .bodyValue(CreateSessionRequest(attemptId, sessionDto))
@@ -158,13 +180,14 @@ class LegacyGameMatchService(
             .retrieve()
             .bodyToMono(SessionReadyResponse::class.java)
             .awaitSingle()
+    }
 
     suspend fun getMatchInfo(userId: Long): MatchedInfoDto {
         val sessionInfo = sessionRecoveryStore.getSessionInfo(userId).awaitSingleOrNull()
             ?: throw IllegalArgumentException("Session Not Found")
 
         // ask the server that hosts this session, not an arbitrary available one
-        if (!isSessionActive(sessionInfo.serverUrl(), sessionInfo.sessionId())) {
+        if (!isSessionActive(sessionInfo.serverUrl(), sessionInfo.sessionId(), sessionInfo.lockstepSimulationVersion())) {
             throw IllegalArgumentException("Session Already Deactivated")
         }
 
@@ -177,10 +200,13 @@ class LegacyGameMatchService(
      * this throws [GameServerUnreachableException] instead of reporting the session gone.
      */
     suspend fun isSessionActive(serverUrl: String, sessionId: String): Boolean =
+        isSessionActive(serverUrl, sessionId, null)
+
+    suspend fun isSessionActive(serverUrl: String, sessionId: String, lockstepSimulationVersion: String?): Boolean =
         try {
             webClientBuilder.clone().baseUrl(serverUrl).build()
                 .get()
-                .uri("/api/server/game-sessions/$sessionId/active")
+                .uri(if (lockstepSimulationVersion != null) "/api/server/lockstep-battles/$sessionId/active" else "/api/server/game-sessions/$sessionId/active")
                 .retrieve()
                 .bodyToMono(SimpleBooleanDto::class.java)
                 .awaitSingle()

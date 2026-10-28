@@ -86,6 +86,8 @@ class GameSessionService(
                         room.rightUserId(),
                         publicUrl,
                         room.createdAt(),
+                        room.mapType(),
+                        room.lockstepSimulationVersion(),
                     )
                 }
             }

@@ -7,7 +7,9 @@ public record RoomInfoDto(
         Long leftUserId,
         Long rightUserId,
         String serverUrl,
-        Instant createdAt
+        Instant createdAt,
+        String mapType,
+        String lockstepSimulationVersion
 ) {
 
 }

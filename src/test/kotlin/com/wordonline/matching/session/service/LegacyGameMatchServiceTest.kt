@@ -11,6 +11,7 @@ import com.wordonline.matching.server.exception.GameServerUnreachableException
 import com.wordonline.matching.server.exception.NoAvailableGameServerException
 import com.wordonline.matching.server.service.GameServerManagementService
 import com.wordonline.matching.session.domain.SessionRecoveryInfo
+import com.wordonline.matching.session.config.LockstepProperties
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -44,7 +45,7 @@ class LegacyGameMatchServiceTest {
     /** Every request the service actually sent, so tests can assert which host was asked. */
     private val sentRequests = mutableListOf<ClientRequest>()
 
-    private fun service(respond: (ClientRequest) -> ClientResponse): LegacyGameMatchService {
+    private fun service(properties: LockstepProperties = LockstepProperties(), respond: (ClientRequest) -> ClientResponse): LegacyGameMatchService {
         val builder = WebClient.builder().exchangeFunction { request ->
             sentRequests += request
             Mono.just(respond(request))
@@ -55,6 +56,7 @@ class LegacyGameMatchServiceTest {
             localizationService,
             userService,
             gameServerManagementService,
+            properties,
         )
     }
 
@@ -82,6 +84,35 @@ class LegacyGameMatchServiceTest {
     }
 
     private val sessionDto = SessionDto.PVP("session-1", 1L, 2L)
+
+    @Test
+    fun `서버가 확정한 lockstep 버전을 매칭 응답에 전달한다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+        for (battle in listOf(sessionDto, SessionDto.Practice("session-1", 1L, -2L), SessionDto.PVE("session-1", 1L, 5L))) {
+        val placement = service(LockstepProperties(enabled = true)) {
+            ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .body("""{"attemptId":"attempt-1","sessionId":"session-1","ready":true,"serverUrl":"http://localhost:7777","webSocketUrl":"http://localhost:7777/ws","lockstepSimulationVersion":"lockstep-v1","mapType":"RIVER"}""")
+                .build()
+        }.createSession(battle, "attempt-1")
+        assertThat(placement.matchInfo.lockstepSimulationVersion).isEqualTo("lockstep-v1")
+        assertThat(placement.matchInfo.mapType).isEqualTo("RIVER")
+        }
+        assertThat(sentRequests.map { it.url().path }).containsExactly(
+            "/api/server/lockstep-matches", "/api/server/lockstep-matches", "/api/server/lockstep-matches")
+    }
+
+    @Test
+    fun `lockstep 복구는 해당 세션 생존 API를 조회한다`() = runTest {
+        val active = service {
+            ClientResponse.create(HttpStatus.OK)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .body("""{"value":true}""").build()
+        }.isSessionActive("http://localhost:7777", "session-1", "lockstep-v1")
+        assertThat(active).isTrue()
+        assertThat(sentRequests.single().url().path).isEqualTo("/api/server/lockstep-battles/session-1/active")
+    }
 
     @Test
     fun `첫 서버가 거절하면 다음 서버로 넘어가고 수락한 서버의 URL을 반환한다`() = runTest {

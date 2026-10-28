@@ -52,8 +52,13 @@ class SessionLivenessProbe(
         }
 
         return try {
+            val active = if (matchInfo.lockstepSimulationVersion == null) {
+                legacyGameMatchService.isSessionActive(matchInfo.server, matchInfo.sessionId)
+            } else {
+                legacyGameMatchService.isSessionActive(matchInfo.server, matchInfo.sessionId, matchInfo.lockstepSimulationVersion)
+            }
             when {
-                legacyGameMatchService.isSessionActive(matchInfo.server, matchInfo.sessionId) -> SessionLiveness.ALIVE
+                active -> SessionLiveness.ALIVE
                 // Same process, session gone: it ran the game to its end rather than losing it.
                 generation == BootGeneration.SAME -> SessionLiveness.ENDED
                 else -> SessionLiveness.LOST

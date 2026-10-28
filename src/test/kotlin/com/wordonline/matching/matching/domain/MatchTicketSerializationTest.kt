@@ -31,6 +31,7 @@ class MatchTicketSerializationTest {
                 rightUser = UserDetailResponseDto(2L, "right", "right@example.com"),
                 sessionId = "session-1",
                 webSocketUrl = "http://localhost:7777/ws",
+                lockstepSimulationVersion = "lockstep-v1",
             ),
             attemptId = "attempt-1",
             serverId = 7L,
@@ -46,6 +47,7 @@ class MatchTicketSerializationTest {
         assertThat(decoded).isEqualTo(ticket)
         assertThat(decoded.matchInfo?.server).isEqualTo("http://localhost:7777")
         assertThat(decoded.matchInfo?.webSocketUrl).isEqualTo("http://localhost:7777/ws")
+        assertThat(decoded.matchInfo?.lockstepSimulationVersion).isEqualTo("lockstep-v1")
         assertThat(decoded.serverInstanceId)
             .`as`("호스트 재시작 판별의 유일한 근거이므로 왕복에서 사라지면 안 된다")
             .isEqualTo("boot-1")
