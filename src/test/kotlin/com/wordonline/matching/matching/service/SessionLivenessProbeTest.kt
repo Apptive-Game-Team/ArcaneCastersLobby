@@ -116,4 +116,22 @@ class SessionLivenessProbeTest {
 
         assertThat(probe.check(ticket(instanceId = "boot-1"))).isEqualTo(SessionLiveness.UNKNOWN)
     }
+    @Test
+    fun `lockstep은 세대가 달라도 호스트의 복구 세션이 활성 상태면 유지한다`() = runTest {
+        val original = ticket(instanceId = "boot-0")
+        val recovering = original.copy(matchInfo = original.matchInfo!!.copy(lockstepSimulationVersion = "lockstep-v1"))
+        whenever(legacyGameMatchService.isSessionActive(host, "session-1", "lockstep-v1")).thenReturn(true)
+        assertThat(probe.check(recovering)).isEqualTo(SessionLiveness.ALIVE)
+        verify(legacyGameMatchService).isSessionActive(host, "session-1", "lockstep-v1")
+    }
+
+    @Test
+    fun `lockstep 재시작 복구 조회 실패는 소실로 확정하지 않는다`() = runTest {
+        val original = ticket(instanceId = "boot-0")
+        val recovering = original.copy(matchInfo = original.matchInfo!!.copy(lockstepSimulationVersion = "lockstep-v1"))
+        whenever(legacyGameMatchService.isSessionActive(host, "session-1", "lockstep-v1"))
+            .thenThrow(GameServerUnreachableException("recovery pending"))
+        assertThat(probe.check(recovering)).isEqualTo(SessionLiveness.UNKNOWN)
+    }
+
 }

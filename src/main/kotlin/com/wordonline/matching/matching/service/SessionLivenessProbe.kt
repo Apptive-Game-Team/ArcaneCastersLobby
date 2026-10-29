@@ -41,7 +41,7 @@ class SessionLivenessProbe(
         val matchInfo = ticket.matchInfo ?: return SessionLiveness.UNKNOWN
         val generation = bootGeneration(ticket)
 
-        if (generation == BootGeneration.DIFFERENT) {
+        if (generation == BootGeneration.DIFFERENT && matchInfo.lockstepSimulationVersion == null) {
             log.info(
                 "Host process restarted since match: ticketId={}, sessionId={}, ticketInstanceId={}",
                 ticket.ticketId,
@@ -60,7 +60,7 @@ class SessionLivenessProbe(
             when {
                 active -> SessionLiveness.ALIVE
                 // Same process, session gone: it ran the game to its end rather than losing it.
-                generation == BootGeneration.SAME -> SessionLiveness.ENDED
+                generation == BootGeneration.SAME || matchInfo.lockstepSimulationVersion != null -> SessionLiveness.ENDED
                 else -> SessionLiveness.LOST
             }
         } catch (e: CancellationException) {

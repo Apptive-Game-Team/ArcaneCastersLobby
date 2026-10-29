@@ -76,6 +76,9 @@ class SessionEndedNotificationService(
     private fun isStale(ticket: MatchTicket, instanceId: String): Boolean {
         val accepted = ticket.serverInstanceId
         val current = sessionLivenessProbe.hostOf(ticket)?.instanceId
-        return (accepted != null && accepted != instanceId) || (current != null && current != instanceId)
+        // lockstep의 outbox는 placement generation을 보존하며 호스트 재시작 뒤에도 재전송한다.
+        // 티켓에 기록된 placement와 다른 송신자는 계속 차단한다.
+        val lockstep = ticket.matchInfo?.lockstepSimulationVersion != null
+        return (accepted != null && accepted != instanceId) || (!lockstep && current != null && current != instanceId)
     }
 }

@@ -209,6 +209,32 @@ class SessionEndedNotificationServiceTest {
         verify(userService, never()).markOnline(2L)
     }
 
+    @Test
+    fun `lockstep outbox는 호스트와 수신 서비스 재시작 뒤에도 최초 placement 통보를 한 번 반영한다`() = runTest {
+        val first = matchedTicket("ticket-1", 1L)
+        val second = matchedTicket("ticket-2", 2L)
+        seed(first.copy(matchInfo = first.matchInfo!!.copy(lockstepSimulationVersion = "lockstep-v1")))
+        seed(second.copy(matchInfo = second.matchInfo!!.copy(lockstepSimulationVersion = "lockstep-v1")))
+        serverHealthRegistry.replaceServers(listOf(server.copy(instanceId = "boot-2")))
+        service.sessionEnded("session-1", "boot-1")
+        val after = decoded("ticket-1")
+        val restarted = SessionEndedNotificationService(repository, probe, recovery)
+        restarted.sessionEnded("session-1", "boot-1")
+        assertThat(decoded("ticket-1")).isEqualTo(after)
+        assertThat(decoded("ticket-2").reason).isEqualTo("SESSION_ENDED")
+        verify(userService, times(1)).markOnline(1L)
+        verify(userService, times(1)).markOnline(2L)
+    }
+
+    @Test
+    fun `lockstep도 최초 placement와 다른 송신자의 종료 통보는 거부한다`() = runTest {
+        val original = matchedTicket("ticket-1", 1L)
+        seed(original.copy(matchInfo = original.matchInfo!!.copy(lockstepSimulationVersion = "lockstep-v1")))
+        service.sessionEnded("session-1", "boot-0")
+        assertThat(decoded("ticket-1").state).isEqualTo(MatchTicketState.MATCHED)
+        verify(userService, never()).markOnline(any())
+    }
+
     private fun decoded(ticketId: String): MatchTicket =
         objectMapper.readValue(sandbox.get("matching:ticket:$ticketId"), MatchTicket::class.java)
 }
