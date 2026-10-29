@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.csrf
@@ -14,10 +15,24 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.reactive.server.WebTestClient
 
 @WebFluxTest(controllers = [ProgressionController::class])
+@AutoConfigureWebTestClient(timeout = "PT30S")
 @Import(UserIdResolver::class)
 class ProgressionEndpointsTest {
     @Autowired private lateinit var client: WebTestClient
     @MockitoBean private lateinit var service: ProgressionService
+
+    @Test
+    fun `레벨 보상 조회는 인증된 계정의 고정 보상만 반환한다`() {
+        runBlocking { whenever(service.rewards(7)).thenReturn(ProgressionRewardsResponse("NATURE",
+            listOf(ProgressionLevelReward(10, 900, 1, 6, listOf(ProgressionFixedReward(43, "tornado_strike", 2)))))) }
+        client.mutateWith(mockJwt().jwt { it.claim("memberId", 7L) }).get()
+            .uri("/api/users/mine/progression/rewards").exchange().expectStatus().isOk
+            .expectBody().jsonPath("$.faction").isEqualTo("NATURE")
+            .jsonPath("$.levels[0].cards[0].magicName").isEqualTo("tornado_strike")
+            .jsonPath("$.levels[0].rewardSlots").isEqualTo(6)
+        client.mutateWith(mockJwt().jwt { it.claim("memberId", 8L) }).get()
+            .uri("/api/users/mine/progression/rewards").exchange().expectStatus().isEqualTo(409)
+    }
 
     @Test
     fun `성장 조회는 토큰의 사용자만 사용한다`() {

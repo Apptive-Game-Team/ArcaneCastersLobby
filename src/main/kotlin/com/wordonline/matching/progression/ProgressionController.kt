@@ -9,6 +9,10 @@ data class ChooseFactionRequest(val faction: String)
 @RestController
 @RequestMapping("/api/users/mine/progression")
 class ProgressionController(private val service: ProgressionService) {
+    @GetMapping("/rewards")
+    suspend fun rewards(@UserId userId: Long?): ResponseEntity<ProgressionRewardsResponse> =
+        service.rewards(userId!!)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.status(409).build()
+
     @PostMapping("/sync")
     suspend fun sync(@UserId userId: Long?): ProgressionResponse = service.sync(userId!!)
 

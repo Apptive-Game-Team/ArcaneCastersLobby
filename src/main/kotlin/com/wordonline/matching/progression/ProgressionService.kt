@@ -14,6 +14,16 @@ class ProgressionService(
     private val properties: ProgressionProperties,
     private val transaction: TransactionalOperator,
 ) {
+    suspend fun rewards(userId: Long): ProgressionRewardsResponse? {
+        val faction = repository.faction(userId) ?: return null
+        val magics = repository.rewardCatalog(faction).groupBy { it.level }
+        return ProgressionRewardsResponse(faction, (1..ProgressionPolicy.MAX_LEVEL).map { level ->
+            ProgressionLevelReward(level, ProgressionPolicy.threshold(level),
+                if (level == 1) 0 else 1, if (level == 1) 0 else ProgressionPolicy.slots(level),
+                magics[level].orEmpty().map { ProgressionFixedReward(it.magicId, it.magicName, if (level == 1) 3 else 2) })
+        })
+    }
+
     suspend fun sync(userId: Long): ProgressionResponse = transaction.executeAndAwait {
         syncLocked(userId, repository.lock(userId))
     }

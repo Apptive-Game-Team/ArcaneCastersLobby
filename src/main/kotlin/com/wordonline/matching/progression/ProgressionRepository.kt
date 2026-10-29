@@ -47,6 +47,17 @@ class ProgressionRepository(private val db: DatabaseClient) {
             WHERE r.faction=:faction AND r.unlock_level=:level ORDER BY m.id""", "faction" to faction, "level" to level)
             .map { r, _ -> ProgressionMagic(r.long("id"), r.get("name", String::class.java)!!) }.all().asFlow().toList()
 
+    // 조회 화면은 지급표를 읽기만 하며 계정 생성이나 보상 지급을 수행하지 않는다.
+    suspend fun faction(userId: Long): String? =
+        query("SELECT faction FROM player_progression WHERE user_id=:uid AND faction IS NOT NULL", "uid" to userId)
+            .map { r, _ -> r.get("faction", String::class.java)!! }.one().awaitSingleOrNull()
+
+    suspend fun rewardCatalog(faction: String): List<ProgressionCatalogMagic> =
+        query("""SELECT m.id,m.name,r.unlock_level FROM progression_magic_rewards r
+            JOIN magics m ON m.id=r.magic_id WHERE r.faction=:faction ORDER BY r.unlock_level,m.id""", "faction" to faction)
+            .map { r, _ -> ProgressionCatalogMagic(r.long("unlock_level").toInt(), r.long("id"), r.get("name", String::class.java)!!) }
+            .all().asFlow().toList()
+
     suspend fun eligibleMagics(userId: Long, level: Int): List<ProgressionMagic> =
         query("""SELECT m.id,m.name FROM magics m
             LEFT JOIN progression_magic_rewards r ON r.magic_id=m.id
