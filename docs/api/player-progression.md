@@ -24,7 +24,7 @@ Database V121을 먼저 적용하고 lobby, client 순서로 배포한다. Clien
 - `HELL`: fire_shot, ember_spirit_swarm, towerback, rock_golem, magma_explosion.
 - `NATURE`: chain_lightning, water_slime_swarm, vine_spirit, tree_golem, water_explosion.
 - 매칭 승리 100 XP, 패배 25 XP, 무승부 50 XP, 취소 0 XP. 친선전·연습·PvE는 제외한다.
-- 현재 게임 서버는 항복과 일반 패배를 구분해 기록하지 않는다. 종료 사유가 없는 패배는 25 XP다. `SURRENDER`, `DISCONNECT`, `FORFEIT`가 기록된 패배는 0 XP로 처리한다. 항상 항복을 0 XP로 처리하려면 게임 서버 기록 보완이 필요하다.
+- Game PR #185와 GameRust PR #21에서 항복은 `SURRENDER`, 패배 확정 시 접속이 끊긴 경우는 `DISCONNECT`로 저장한다. 해당 원인의 패배는 0 XP, 승자는 100 XP다. 복귀 후 일반 패배와 종료 사유가 없는 과거 패배는 25 XP다. DB V121과 함께 적용한다.
 - 레벨 1~9에서 다음 레벨까지 100 XP, 10~29는 250 XP, 30~49는 330 XP. 50레벨 누적 12,500 XP.
 - 레벨 2~50마다 상자 1개. 일반 레벨 3칸, 5의 배수 레벨 6칸, 레벨 50은 7칸. 합계 49개·178칸.
 - 한국 날짜 기준 일일 3칸 상자 1개. 접속하지 않은 날짜는 소급하지 않는다. 보관한 상자는 만료되지 않는다.
@@ -67,7 +67,7 @@ Database V121을 먼저 적용하고 lobby, client 순서로 배포한다. Clien
 
 ## 검증
 
-신규 정책·API·PostgreSQL 통합 테스트 10개, 관련 상자·매칭을 포함한 51개 테스트 통과.
+신규 정책·API·PostgreSQL 통합 테스트 12개 통과. 관련 상자·매칭을 포함한 기존 회귀 테스트 51개도 통과했다.
 최신 DB 전체 마이그레이션을 격리 PostgreSQL에 적용해 동시 선택·중복 상자·풀 고갈·경기 반영을 검증했다.
 전체 테스트의 기존 모험 보상 기대값 불일치 3건은 변경 전 `origin/feature/103`에서도 재현된다.
-운영 배포와 실제 Unity 플레이 검증은 수행하지 않았다.
+일일 상자 날짜 변경과 항복·이탈 기록의 0 XP 반영도 검증했다. Unity 프리팹 렌더링 캡처는 Client PR #396에 첨부한다. 운영 배포와 운영 서버에 연결한 플레이 검증은 수행하지 않았다.

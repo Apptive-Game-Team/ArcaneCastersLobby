@@ -61,6 +61,32 @@ class ProgressionPostgresIntegrationTest {
     }
 
     @Test
+    fun `항복과 이탈 패배는 경험치를 지급하지 않고 승자는 정상 지급한다`(): Unit = runBlocking {
+        service.choose(user, "HELL")
+        for ((index, reason) in listOf("SURRENDER", "DISCONNECT").withIndex()) {
+            val sid = "$user-forfeit-$index"
+            repository.registerMatch(sid, user)
+            val gameId = number("""INSERT INTO statistic_games(win_user_id,loss_user_id,duration,game_type,server_version,event_schema_version)
+                VALUES (0,$user,180,'PVP','test',1) RETURNING id""")
+            exec("""INSERT INTO statistic_game_sessions(session_id,left_user_id,right_user_id,game_type,server_domain,server_port,
+                server_instance_id,server_version,status,end_reason,statistic_game_id,ended_at)
+                VALUES ('$sid',$user,0,'PVP','localhost',1,'test','test','COMPLETED','$reason',$gameId,now())""")
+        }
+        assertThat(service.sync(user).xp).isZero()
+        assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(2)
+        assertThat(ProgressionPolicy.xp(0, 0, user, "COMPLETED", "SURRENDER")).isEqualTo(100)
+    }
+
+    @Test
+    fun `지난 일일 상자는 보존하고 오늘 상자는 한번만 지급한다`(): Unit = runBlocking {
+        service.choose(user, "NATURE")
+        exec("UPDATE user_chests SET reward_source='daily:2000-01-01' WHERE user_id=$user")
+        assertThat(service.sync(user).grantedChests).isEqualTo(1)
+        assertThat(service.sync(user).grantedChests).isZero()
+        assertThat(number("SELECT COUNT(*) FROM user_chests WHERE user_id=$user AND opened_at IS NULL")).isEqualTo(2)
+    }
+
+    @Test
     fun `동시 세력 선택과 일일 상자는 한 번만 지급된다`(): Unit = runBlocking {
         listOf(async { service.choose(user, "HELL") }, async { service.choose(user, "HELL") }).awaitAll()
         assertThat(number("SELECT SUM(count) FROM user_magics WHERE user_id=$user")).isEqualTo(15)
