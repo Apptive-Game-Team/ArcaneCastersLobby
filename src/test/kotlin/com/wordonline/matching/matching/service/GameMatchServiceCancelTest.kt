@@ -52,6 +52,7 @@ class GameMatchServiceCancelTest {
         matchTicketRepository = repository,
         matchTicketProperties = MatchTicketProperties(),
         gameServerManagementService = mock<GameServerManagementService>(),
+        progressionRepository = mock(),
     )
 
     init {

@@ -17,6 +17,7 @@ data class UnopenedChestRow(
     val chestId: Long,
     val chestKey: String,
     val acquiredAt: Instant,
+    val rewardSlots: Int = 0,
 )
 
 /** Reads `chests` and `chest_rewards`, and writes `user_chests`. */
@@ -55,7 +56,7 @@ class ChestRepository(
     suspend fun findUnopened(userId: Long): List<UnopenedChestRow> =
         databaseClient.sql(
             """
-            SELECT uc.id, uc.chest_id, c.key, uc.acquired_at
+            SELECT uc.id, uc.chest_id, c.key, uc.acquired_at, uc.reward_slots
             FROM user_chests uc
             JOIN chests c ON c.id = uc.chest_id
             WHERE uc.user_id = :userId
@@ -70,6 +71,7 @@ class ChestRepository(
                     chestId = row.get("chest_id", Number::class.java)!!.toLong(),
                     chestKey = row.get("key", String::class.java)!!,
                     acquiredAt = row.get("acquired_at", OffsetDateTime::class.java)!!.toInstant(),
+                    rewardSlots = row.get("reward_slots", Number::class.java)!!.toInt(),
                 )
             }
             .all()

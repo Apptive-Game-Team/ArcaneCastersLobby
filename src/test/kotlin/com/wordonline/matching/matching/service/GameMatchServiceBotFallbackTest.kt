@@ -46,6 +46,7 @@ class GameMatchServiceBotFallbackTest {
         matchTicketRepository,
         MatchTicketProperties(),
         mock<GameServerManagementService>(),
+        mock(),
     )
 
     private fun ticket(userId: Long, waitedSeconds: Long, mmr: Long = 1000L): MatchTicket {

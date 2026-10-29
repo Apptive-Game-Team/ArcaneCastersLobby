@@ -40,16 +40,14 @@ public class UserService {
     private final UserQuestRepository userQuestRepository;
 
     public Mono<UserResponseDto> getUser(long memberId) {
-        return findUserDomain(memberId)
-                .onErrorResume(e -> initialUser(memberId))
+        return userRepository.findById(memberId)
+                .switchIfEmpty(Mono.defer(() -> initialUser(memberId)))
                 .map(UserResponseDto::new);
     }
 
     private Mono<User> initialUser(long memberId) {
         return userRepository.insertUser(memberId)
-                .then(userRepository.initUserMagic(memberId))
                 .then(userQuestRepository.insertMissing(memberId))
-                .then(userRepository.initUserDeck(memberId))
                 .then(userRepository.findById(memberId));
     }
 
