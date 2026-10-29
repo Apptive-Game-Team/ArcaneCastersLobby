@@ -1,5 +1,8 @@
 package com.wordonline.matching.chest.service
 
+import com.wordonline.matching.progression.ProgressionRepository
+import com.wordonline.matching.progression.ProgressionProperties
+import com.wordonline.matching.progression.ProgressionService
 import com.wordonline.matching.appearance.repository.AppearanceRepository
 import com.wordonline.matching.appearance.service.AppearanceSelection
 import com.wordonline.matching.appearance.service.AppearanceService
@@ -155,7 +158,7 @@ class AppearanceChestPostgresIntegrationTest {
     }
 
     private fun chestService(grantors: List<RewardGrantor> = grantors()) =
-        ChestService(chestRepository, registry(grantors), transactionalOperator)
+        ChestService(chestRepository, registry(grantors), transactionalOperator, ProgressionRepository(databaseClient), ProgressionService(ProgressionRepository(databaseClient), ProgressionProperties(), transactionalOperator))
 
     /** Gives the user one unopened chest through the real grantor and returns its `user_chests.id`. */
     private suspend fun giveChest(chestKey: String): Long {

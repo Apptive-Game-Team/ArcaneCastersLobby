@@ -1,6 +1,9 @@
 package com.wordonline.matching.quest.service
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.wordonline.matching.progression.ProgressionRepository
+import com.wordonline.matching.progression.ProgressionProperties
+import com.wordonline.matching.progression.ProgressionService
 import com.wordonline.matching.appearance.repository.AppearanceRepository
 import com.wordonline.matching.chest.dto.ChestRewardDto
 import com.wordonline.matching.chest.repository.ChestRepository
@@ -301,7 +304,7 @@ class QuestClaimPostgresIntegrationTest {
         val questId = adventureQuestId("forest")
         val forestChestId = chestId("forest_chest")
         val service = questService()
-        val chestService = ChestService(chestRepository, registry(), transactionalOperator)
+        val chestService = ChestService(chestRepository, registry(), transactionalOperator, ProgressionRepository(databaseClient), ProgressionService(ProgressionRepository(databaseClient), ProgressionProperties(), transactionalOperator))
 
         val before = service.findMyQuests(userId).single { it.questId == questId }
         assertThat(before.claimMode).isEqualTo("MANUAL")

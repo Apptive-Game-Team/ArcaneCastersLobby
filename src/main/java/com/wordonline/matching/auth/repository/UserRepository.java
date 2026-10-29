@@ -35,7 +35,7 @@ WHERE id = :userId;
     @Query(
             """
             INSERT INTO users(id, status) VALUES
-            (:userId, 'Online');
+            (:userId, 'Online') ON CONFLICT (id) DO NOTHING;
             """
     )
     Mono<Long> insertUser(@Param("userId") Long userId);

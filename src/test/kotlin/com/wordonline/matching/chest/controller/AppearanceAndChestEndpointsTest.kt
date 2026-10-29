@@ -136,7 +136,7 @@ class AppearanceAndChestEndpointsTest {
             .expectBody()
             .json(
                 """
-                [{"id":15,"chestId":1,"chestKey":"forest_chest","acquiredAt":"2026-10-02T12:00:00Z",
+                [{"id":15,"chestId":1,"chestKey":"forest_chest","acquiredAt":"2026-10-02T12:00:00Z","rewardSlots":0,
                   "rewards":[{"rewardType":"APPEARANCE","rewardId":6,"rewardKey":"grass","amount":1}]}]
                 """,
                 true,
