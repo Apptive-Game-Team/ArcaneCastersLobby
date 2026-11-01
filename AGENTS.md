@@ -81,6 +81,10 @@ Confirm both landed with `gh issue view <n> --json assignees,labels` after creat
 
 ## Security & Configuration Tips
 
+Before changing tutorial allocation, read [tutorial-battles.md](docs/api/tutorial-battles.md).
+Pin active tutorial routing by owner rather than request UUID, and obtain the faction
+from progression storage instead of trusting a client-supplied value.
+
 Read [developer-playground.md](docs/api/developer-playground.md) before changing
 developer session creation. It must not use ordinary createSession or write
 SessionRecoveryStore; doing so overwrites the developer's ordinary match recovery.
