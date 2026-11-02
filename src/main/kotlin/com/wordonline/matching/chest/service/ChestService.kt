@@ -4,6 +4,8 @@ import com.wordonline.matching.chest.dto.ChestRewardDto
 import com.wordonline.matching.chest.dto.UnopenedChestResponseDto
 import com.wordonline.matching.chest.entity.ChestReward
 import com.wordonline.matching.chest.repository.ChestRepository
+import com.wordonline.matching.progression.ProgressionRepository
+import com.wordonline.matching.progression.ProgressionService
 import com.wordonline.matching.quest.reward.ChestRewardGrantor
 import com.wordonline.matching.quest.reward.RewardNotGrantableException
 import com.wordonline.matching.quest.service.QuestRegistry
@@ -34,6 +36,8 @@ class ChestService(
     private val chestRepository: ChestRepository,
     private val questRegistry: QuestRegistry,
     private val transactionalOperator: TransactionalOperator,
+    private val progressionRepository: ProgressionRepository,
+    private val progressionService: ProgressionService,
 ) {
     /**
      * Read-only. This user's unopened chests, oldest first, each with its contents as a preview.
@@ -51,6 +55,7 @@ class ChestService(
                 chestId = chest.chestId,
                 chestKey = chest.chestKey,
                 acquiredAt = chest.acquiredAt,
+                rewardSlots = chest.rewardSlots,
                 rewards = rewardsByChestId[chest.chestId].orEmpty().map { reward ->
                     ChestRewardDto(reward.rewardType, reward.targetId ?: 0L, rewardKeys.keyOf(reward), reward.amount)
                 },
@@ -69,8 +74,10 @@ class ChestService(
      * it, so the chest stays unopened and the error reaches the caller. Two concurrent opens of the
      * same chest grant once: the second waits on the row lock and then finds it opened.
      */
-    suspend fun openChest(userId: Long, userChestId: Long): ChestOpenResult =
-        transactionalOperator.executeAndAwait {
+    suspend fun openChest(userId: Long, userChestId: Long): ChestOpenResult {
+        progressionService.sync(userId)
+        return transactionalOperator.executeAndAwait {
+            val state = progressionRepository.lock(userId)
             val chestId = chestRepository.claimUnopened(userChestId, userId)
             if (chestId == null) {
                 when (chestRepository.findOpened(userChestId, userId)) {
@@ -83,6 +90,9 @@ class ChestService(
                     )
                 }
             } else {
+                if (chestRepository.findKeyById(chestId) == "progression_chest") {
+                    return@executeAndAwait ChestOpenResult.Opened(progressionService.openLocked(userId, userChestId, state))
+                }
                 val rewards = chestRepository.findRewardsOfChests(listOf(chestId)).map { reward ->
                     // The startup check rejects this; a row added after startup must not mint chests.
                     if (reward.rewardType == ChestRewardGrantor.TYPE) {
@@ -95,4 +105,5 @@ class ChestService(
                 ChestOpenResult.Opened(rewards)
             }
         }
+    }
 }

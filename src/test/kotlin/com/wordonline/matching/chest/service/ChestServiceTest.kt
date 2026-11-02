@@ -152,6 +152,8 @@ class ChestServiceTest {
             repository,
             QuestRegistry(listOf(FixedProgressCondition("STAGE_CLEAR")), listOf(appearanceGrantor, magicGrantor, chestGrantor)),
             transactionalOperator,
+            mock(),
+            mock(),
         )
     }
 }

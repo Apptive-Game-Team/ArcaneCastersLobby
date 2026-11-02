@@ -35,23 +35,10 @@ WHERE id = :userId;
     @Query(
             """
             INSERT INTO users(id, status) VALUES
-            (:userId, 'Online');
+            (:userId, 'Online') ON CONFLICT (id) DO NOTHING;
             """
     )
     Mono<Long> insertUser(@Param("userId") Long userId);
-
-    @Query(
-            """
-            INSERT INTO user_magics(user_id, magic_id, count)
-            (
-                SELECT :userId, m.id, 3
-                FROM magics m
-                WHERE m.access_type = 'DEFAULT'
-                AND m.purpose = 'PLAYER'
-            );
-            """
-    )
-    Mono<Void> initUserMagic(@Param("userId") Long userId);
 
     @Query(
             """

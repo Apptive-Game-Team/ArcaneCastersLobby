@@ -82,7 +82,7 @@ class LocalSessionService(
         val deckCardIds = repository.findSelectedDeckCardIds(userId)
         if (deckCardIds.isEmpty()) return LocalSessionIssueResult.NoSelectedDeck
 
-        val opponent = if (type == LocalSessionType.PRACTICE) practiceOpponentSelector.select(userId) else null
+        val opponent = if (type == LocalSessionType.PRACTICE) practiceOpponentSelector.selectLocal(userId) else null
         val rightUserId = opponent?.botId ?: PVE_RIGHT_USER_ID
         val sessionId = "local-${matchingQueueRepository.nextSessionId().awaitSingle()}"
         val issuedAt = clock.instant().truncatedTo(ChronoUnit.MILLIS)

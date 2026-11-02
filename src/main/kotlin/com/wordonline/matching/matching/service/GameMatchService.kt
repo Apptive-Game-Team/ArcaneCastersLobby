@@ -1,6 +1,7 @@
 package com.wordonline.matching.matching.service
 
 import com.wordonline.matching.auth.service.UserService
+import com.wordonline.matching.progression.ProgressionRepository
 import com.wordonline.matching.deck.service.DeckService
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.MatchDeckMode
@@ -46,6 +47,7 @@ class GameMatchService(
     private val matchTicketRepository: MatchTicketRepository,
     private val matchTicketProperties: MatchTicketProperties,
     private val gameServerManagementService: GameServerManagementService,
+    private val progressionRepository: ProgressionRepository,
 ) {
     private val clock = Clock.systemUTC()
     private val log = LoggerFactory.getLogger(javaClass)
@@ -195,6 +197,8 @@ class GameMatchService(
         )
 
         try {
+            progressionRepository.registerMatch(sessionId, uid1)
+            progressionRepository.registerMatch(sessionId, uid2)
             val placement = legacyGameMatchService.createSession(
                 sessionDto,
                 attemptId,
@@ -273,6 +277,7 @@ class GameMatchService(
             val sessionId = "session-${matchingQueueRepository.nextSessionId().awaitSingle()}"
             val sessionDto = SessionDto.PVP(sessionId, ticket.userId, botId, claiming.deckCardIds, null)
             try {
+                progressionRepository.registerMatch(sessionId, ticket.userId)
                 val placement = legacyGameMatchService.createSession(
                     sessionDto,
                     attemptId,

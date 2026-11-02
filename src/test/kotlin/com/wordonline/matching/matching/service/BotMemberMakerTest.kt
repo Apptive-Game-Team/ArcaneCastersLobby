@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -15,9 +16,14 @@ import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 
 class BotMemberMakerTest {
+    private val learnedBots = LearnedBotAvailability(
+        org.springframework.web.reactive.function.client.WebClient.builder(), mock(),
+        com.wordonline.matching.matching.config.LearnedBotProperties(),
+        com.fasterxml.jackson.databind.ObjectMapper(),
+    )
 
     private val botPersonaRepository: BotPersonaRepository = mock()
-    private val botMemberMaker = BotMemberMaker(botPersonaRepository, PracticeMatchProperties(nearestBotCount = 3))
+    private val botMemberMaker = BotMemberMaker(botPersonaRepository, PracticeMatchProperties(nearestBotCount = 3), learnedBots)
 
     @Test
     fun `활성 persona 의 이름을 돌려준다`() = runTest {
@@ -64,11 +70,22 @@ class BotMemberMakerTest {
 
     @Test
     fun `nearestBotCount 가 0 이하여도 한 봇은 고른다`() = runTest {
-        val maker = BotMemberMaker(botPersonaRepository, PracticeMatchProperties(nearestBotCount = 0))
+        val maker = BotMemberMaker(botPersonaRepository, PracticeMatchProperties(nearestBotCount = 0), learnedBots)
         whenever(botPersonaRepository.findNearestMatchable(1000L, 1))
             .thenReturn(Flux.just(BotPersona(-12L, "only", true, false)))
 
         assertThat(maker.getPracticeBotIdNear(1000L)).isEqualTo(-12L)
+    }
+
+    @Test
+    fun `준비되지 않은 모델은 가까운 봇 개수를 제한하기 전에 제외한다`() = runTest {
+        val availability: LearnedBotAvailability = mock()
+        whenever(availability.unavailableBotIds()).thenReturn(listOf(-12L))
+        whenever(botPersonaRepository.findNearestMatchable(1000L, 3, listOf(-12L)))
+            .thenReturn(Flux.just(BotPersona(-13L, "rule", true, false)))
+        val maker = BotMemberMaker(botPersonaRepository, PracticeMatchProperties(nearestBotCount = 3), availability)
+        assertThat(maker.getPracticeBotIdNear(1000L)).isEqualTo(-13L)
+        verify(botPersonaRepository).findNearestMatchable(1000L, 3, listOf(-12L))
     }
 
     @Test
@@ -78,6 +95,20 @@ class BotMemberMakerTest {
         assertThat(failureOf { botMemberMaker.getPracticeBotIdNear(1000L) })
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("No enabled bot persona")
+    }
+
+    @Test
+    fun `로컬에서는 원격 준비 상태를 조회하지 않고 지정 모델 봇을 모두 제외한다`() = runTest {
+        val availability: LearnedBotAvailability = mock()
+        whenever(availability.assignedBotIds()).thenReturn(listOf(-12L, -14L))
+        whenever(botPersonaRepository.findNearestMatchable(1000L, 3, listOf(-12L, -14L)))
+            .thenReturn(Flux.just(BotPersona(-13L, "rule", true, false)))
+        val maker = BotMemberMaker(botPersonaRepository, PracticeMatchProperties(nearestBotCount = 3), availability)
+        assertThat(maker.getLocalPracticeBotIdNear(1000L)).isEqualTo(-13L)
+        verify(availability, never()).unavailableBotIds()
+        whenever(botPersonaRepository.findHospitality()).thenReturn(Mono.just(BotPersona(-12L, "model", true, true)))
+        assertThat(failureOf { maker.getLocalHospitalityBotId().awaitSingle() })
+            .isInstanceOf(IllegalStateException::class.java)
     }
 
     @Test

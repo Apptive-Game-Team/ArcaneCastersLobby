@@ -27,6 +27,7 @@ import org.springframework.context.i18n.LocaleContext
 import org.springframework.context.i18n.SimpleLocaleContext
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
+import com.wordonline.matching.matching.service.LearnedBotAvailability
 import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Mono
 import java.util.Locale
@@ -39,6 +40,7 @@ class LegacyGameMatchService(
     private val localizationService: LocalizationService,
     private val userService: UserService,
     private val gameServerManagementService: GameServerManagementService,
+    private val learnedBots: LearnedBotAvailability,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -158,10 +160,13 @@ class LegacyGameMatchService(
         }
     }
 
-    private suspend fun requestSession(url: String, sessionDto: SessionDto, attemptId: String): SessionReadyResponse =
+    private suspend fun requestSession(url: String, sessionDto: SessionDto, attemptId: String): SessionReadyResponse {
+        if (!learnedBots.permits(url, listOfNotNull(sessionDto.uid1, sessionDto.uid2))) {
+            throw IllegalStateException("learned bot model unavailable")
+        }
         // clone() first: baseUrl() mutates the shared builder, and session offers run concurrently
         // across candidate servers. See GameServerClient for the failure this prevents.
-        webClientBuilder.clone().baseUrl(url).build()
+        return webClientBuilder.clone().baseUrl(url).build()
             .post()
             .uri("/api/server/game-sessions")
             .bodyValue(CreateSessionRequest(attemptId, sessionDto))
@@ -169,6 +174,7 @@ class LegacyGameMatchService(
             .retrieve()
             .bodyToMono(SessionReadyResponse::class.java)
             .awaitSingle()
+    }
 
     suspend fun getMatchInfo(userId: Long): MatchedInfoDto {
         val sessionInfo = sessionRecoveryStore.getSessionInfo(userId).awaitSingleOrNull()
