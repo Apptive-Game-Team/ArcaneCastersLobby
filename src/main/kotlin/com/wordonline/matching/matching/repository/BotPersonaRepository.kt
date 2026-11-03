@@ -25,6 +25,9 @@ bp.enabled = TRUE
 """
 
 interface BotPersonaRepository : R2dbcRepository<BotPersona, Long> {
+    @Query("SELECT bp.user_id FROM bot_personas bp WHERE $MATCHABLE_BOT_PERSONA_CONDITION AND bp.user_id IN (:ids)")
+    fun findMatchableIds(ids: List<Long>): Flux<Long>
+
     fun findByUserId(userId: Long): Mono<BotPersona>
 
     // Excludes the hospitality bot on purpose. It is enabled, so without this clause an ordinary

@@ -57,8 +57,12 @@ class GameMatchService(
     private val scope = CoroutineScope(Dispatchers.Default + exceptionHandler)
 
     suspend fun matchPractice(userId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
-        val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
         val botId = practiceOpponentSelector.select(userId).botId
+        return matchSelectedPractice(userId, botId, pings)
+    }
+
+    suspend fun matchSelectedPractice(userId: Long, botId: Long, pings: Map<Long, Long>?): MatchedInfoDto {
+        val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
         val sessionDto = SessionDto.Practice(sessionId, userId, botId)
         return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
     }
