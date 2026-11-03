@@ -9,7 +9,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.springframework.web.server.ResponseStatusException
 import reactor.core.publisher.Flux
 
 class PracticeDifficultyServiceTest {
@@ -23,9 +22,8 @@ class PracticeDifficultyServiceTest {
         val roster = PracticeDifficulty.INTRO.botIds
         whenever(learned.unavailableBotIds()).thenReturn(listOf(roster.first()))
         whenever(bots.findMatchableIds(roster.drop(1))).thenReturn(Flux.just(roster.last()), Flux.empty())
-        assertThat(service.select("INTRO")).isEqualTo(roster.last())
-        val error = runCatching { service.select("INTRO") }.exceptionOrNull() as ResponseStatusException
-        assertThat(error.statusCode.value()).isEqualTo(409)
+        assertThat(service.select(PracticeDifficulty.INTRO)).isEqualTo(roster.last())
+        assertThat(service.select(PracticeDifficulty.INTRO)).isNull()
     }
 
     @Test

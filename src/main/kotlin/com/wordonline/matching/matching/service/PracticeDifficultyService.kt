@@ -7,9 +7,7 @@ import com.wordonline.matching.matching.repository.BotPersonaRepository
 import com.wordonline.matching.matching.repository.PracticeHistoryRepository
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactive.asFlow
-import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
-import org.springframework.web.server.ResponseStatusException
 import kotlin.math.abs
 
 @Service
@@ -29,12 +27,7 @@ class PracticeDifficultyService(
         return PracticeDifficultyOverview(tiers, recommend(tiers))
     }
 
-    suspend fun select(id: String): Long {
-        val tier = PracticeDifficulty.entries.find { it.name == id }
-            ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown practice difficulty")
-        return eligible(tier.botIds).randomOrNull()
-            ?: throw ResponseStatusException(HttpStatus.CONFLICT, "No opponent available at this difficulty")
-    }
+    suspend fun select(tier: PracticeDifficulty): Long? = eligible(tier.botIds).randomOrNull()
 
     private suspend fun eligible(ids: List<Long>): List<Long> {
         val candidates = ids - learnedBots.unavailableBotIds().toSet()

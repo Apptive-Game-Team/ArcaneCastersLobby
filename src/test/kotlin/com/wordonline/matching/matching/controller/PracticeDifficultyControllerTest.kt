@@ -63,6 +63,14 @@ class PracticeDifficultyControllerTest {
     }
 
     @Test
+    fun `선택한 단계가 비어 있으면 다른 봇을 배정하지 않는다`() = runTest {
+        whenever(learned.unavailableBotIds()).thenReturn(emptyList())
+        whenever(bots.findMatchableIds(PracticeDifficulty.EXPERT.botIds)).thenReturn(Flux.empty())
+        client().post().uri("$path/EXPERT").exchange().expectStatus().isEqualTo(409)
+        verifyNoInteractions(matches)
+    }
+
+    @Test
     fun `없는 난이도 요청은 대전 세션을 만들지 않는다`() {
         client().post().uri("$path/UNKNOWN").exchange().expectStatus().isBadRequest
         verifyNoInteractions(matches)
