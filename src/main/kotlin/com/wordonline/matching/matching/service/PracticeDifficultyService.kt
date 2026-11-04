@@ -32,7 +32,7 @@ class PracticeDifficultyService(
     private suspend fun eligible(ids: List<Long>): List<Long> {
         val candidates = ids - learnedBots.unavailableBotIds().toSet()
         if (candidates.isEmpty()) return emptyList()
-        return bots.findMatchableIds(candidates).asFlow().toList()
+        return bots.findMatchableByUserIds(candidates).map { it.userId }.asFlow().toList()
     }
 
     internal fun recommend(tiers: List<PracticeDifficultyTier>): String? {

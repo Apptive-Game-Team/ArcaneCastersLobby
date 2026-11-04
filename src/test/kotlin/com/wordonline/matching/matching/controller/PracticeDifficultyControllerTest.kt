@@ -3,6 +3,7 @@ package com.wordonline.matching.matching.controller
 import com.wordonline.matching.auth.service.UserIdResolver
 import com.wordonline.matching.auth.dto.UserDetailResponseDto
 import com.wordonline.matching.matching.domain.PracticeDifficulty
+import com.wordonline.matching.matching.domain.BotPersona
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.repository.BotPersonaRepository
 import com.wordonline.matching.matching.repository.PracticeHistoryRepository
@@ -38,7 +39,7 @@ class PracticeDifficultyControllerTest {
     @Test
     fun `전적이 없는 로그인 사용자는 입문부터 시작한다`() = runTest {
         whenever(learned.unavailableBotIds()).thenReturn(emptyList())
-        whenever(bots.findMatchableIds(any())).thenReturn(Flux.just(-37))
+        whenever(bots.findMatchableByUserIds(any())).thenReturn(Flux.just(BotPersona(-37, "Sprout Scout", true)))
         whenever(history.recent(7L)).thenReturn(emptyList())
         client().get().uri(path).exchange().expectStatus().isOk.expectBody()
             .jsonPath("$.recommendedId").isEqualTo("INTRO")
@@ -51,7 +52,8 @@ class PracticeDifficultyControllerTest {
     @Test
     fun `선택한 난이도의 봇과 핑을 이용해 로그인 사용자 세션을 배정한다`() = runTest {
         whenever(learned.unavailableBotIds()).thenReturn(emptyList())
-        whenever(bots.findMatchableIds(PracticeDifficulty.SKILLED.botIds)).thenReturn(Flux.just(-60L))
+        whenever(bots.findMatchableByUserIds(PracticeDifficulty.SKILLED.botIds))
+            .thenReturn(Flux.just(BotPersona(-60, "Golem Architect", true)))
         val player = UserDetailResponseDto(7L, "player", "")
         val opponent = UserDetailResponseDto(-60L, "Golem Architect", "")
         whenever(matches.matchSelectedPractice(7L, -60L, mapOf(2L to 42L))).thenReturn(
@@ -65,7 +67,7 @@ class PracticeDifficultyControllerTest {
     @Test
     fun `선택한 단계가 비어 있으면 다른 봇을 배정하지 않는다`() = runTest {
         whenever(learned.unavailableBotIds()).thenReturn(emptyList())
-        whenever(bots.findMatchableIds(PracticeDifficulty.EXPERT.botIds)).thenReturn(Flux.empty())
+        whenever(bots.findMatchableByUserIds(PracticeDifficulty.EXPERT.botIds)).thenReturn(Flux.empty())
         client().post().uri("$path/EXPERT").exchange().expectStatus().isEqualTo(409)
         verifyNoInteractions(matches)
     }

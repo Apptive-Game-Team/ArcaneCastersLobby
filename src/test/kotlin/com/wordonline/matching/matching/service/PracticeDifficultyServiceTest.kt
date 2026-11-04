@@ -1,6 +1,7 @@
 package com.wordonline.matching.matching.service
 
 import com.wordonline.matching.matching.domain.PracticeDifficulty
+import com.wordonline.matching.matching.domain.BotPersona
 import com.wordonline.matching.matching.repository.BotPersonaRepository
 import com.wordonline.matching.matching.repository.PracticeHistory
 import com.wordonline.matching.matching.repository.PracticeHistoryRepository
@@ -21,7 +22,7 @@ class PracticeDifficultyServiceTest {
     fun `선택한 단계에서 준비된 상대만 고르고 후보가 없으면 거부한다`() = runTest {
         val roster = PracticeDifficulty.INTRO.botIds
         whenever(learned.unavailableBotIds()).thenReturn(listOf(roster.first()))
-        whenever(bots.findMatchableIds(roster.drop(1))).thenReturn(Flux.just(roster.last()), Flux.empty())
+        whenever(bots.findMatchableByUserIds(roster.drop(1))).thenReturn(Flux.just(persona(roster.last())), Flux.empty())
         assertThat(service.select(PracticeDifficulty.INTRO)).isEqualTo(roster.last())
         assertThat(service.select(PracticeDifficulty.INTRO)).isNull()
     }
@@ -31,7 +32,8 @@ class PracticeDifficultyServiceTest {
         val roster = PracticeDifficulty.entries.flatMap { it.botIds }
         assertThat(roster).hasSize(45).doesNotHaveDuplicates()
         whenever(learned.unavailableBotIds()).thenReturn(emptyList())
-        whenever(bots.findMatchableIds(roster)).thenReturn(Flux.fromIterable(roster - PracticeDifficulty.EXPERT.botIds.toSet()))
+        val available = roster - PracticeDifficulty.EXPERT.botIds.toSet()
+        whenever(bots.findMatchableByUserIds(roster)).thenReturn(Flux.fromIterable(available).map(::persona))
         whenever(history.recent(9L)).thenReturn(listOf(
             PracticeHistory("BASIC", 4, 1, 0), PracticeHistory("SKILLED", 2, 2, 1),
             PracticeHistory("ADVANCED", 1, 4, 0), PracticeHistory("EXPERT", 0, 1, 0),
@@ -41,4 +43,6 @@ class PracticeDifficultyServiceTest {
         assertThat(overview.tiers.last().available).isFalse()
         assertThat(overview.tiers.last().losses).isEqualTo(1)
     }
+
+    private fun persona(id: Long) = BotPersona(id, "bot", true)
 }
