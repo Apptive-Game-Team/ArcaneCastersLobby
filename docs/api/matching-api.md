@@ -8,7 +8,7 @@
 
 ### 봇 대전 난이도
 
-`GET /api/match/practice/difficulties`는 단계별 최근 5전의 승·패·무승부와 현재 대전 가능 여부를 반환합니다. `POST /api/match/practice/difficulties/{id}`는 선택한 단계에서 한 봇을 배정합니다. 없는 단계는 400, 배정할 봇이 없으면 409를 반환합니다.
+`GET /api/match/practice/difficulties`는 단계별 최근 5전의 승·패·무승부와 현재 대전 가능 여부를 반환합니다. `POST /api/match/practice/difficulties/{id}`는 선택한 단계에서 한 봇을 배정합니다. deckMode는 SELECTED(기본값) 또는 RANDOM입니다. 로비가 보유 카드로 검증한 15장을 게임 서버에 전달합니다. 단계나 모드가 잘못되면 400, 배정할 봇이 없으면 409, 사용할 덱을 구성할 수 없으면 422를 반환합니다.
 
 봇 후보 쿼리의 반환형을 바꿀 때는 `BotPersonaRepositoryPostgresIntegrationTest`를 전용 PostgreSQL에서 실행하세요. SQL이 올바른 ID를 반환해도 Spring Data R2DBC가 `@Query`의 행을 `Long`으로 변환하다 실패하면 난이도 목록은 500이 됩니다. 저장소를 모킹하거나 SQL만 실행하는 테스트는 이 변환을 거치지 않습니다.
 

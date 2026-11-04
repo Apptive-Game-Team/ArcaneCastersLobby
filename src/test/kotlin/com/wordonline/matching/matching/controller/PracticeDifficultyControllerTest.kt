@@ -4,6 +4,7 @@ import com.wordonline.matching.auth.service.UserIdResolver
 import com.wordonline.matching.auth.dto.UserDetailResponseDto
 import com.wordonline.matching.matching.domain.PracticeDifficulty
 import com.wordonline.matching.matching.domain.BotPersona
+import com.wordonline.matching.matching.dto.MatchDeckMode
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.repository.BotPersonaRepository
 import com.wordonline.matching.matching.repository.PracticeHistoryRepository
@@ -37,6 +38,15 @@ class PracticeDifficultyControllerTest {
     private fun client() = web.mutateWith(mockJwt().jwt { it.claim("memberId", 7L) }).mutateWith(csrf())
 
     @Test
+    fun `랜덤 덱을 만들 수 없으면 422를 반환한다`() = runTest {
+        whenever(learned.unavailableBotIds()).thenReturn(emptyList())
+        whenever(bots.findMatchableByUserIds(PracticeDifficulty.SKILLED.botIds))
+            .thenReturn(Flux.just(BotPersona(-60, "Golem Architect", true)))
+        whenever(matches.matchSelectedPractice(7L, -60L, null, MatchDeckMode.RANDOM)).thenReturn(null)
+        client().post().uri("$path/SKILLED?deckMode=RANDOM").exchange().expectStatus().isEqualTo(422)
+    }
+
+    @Test
     fun `전적이 없는 로그인 사용자는 입문부터 시작한다`() = runTest {
         whenever(learned.unavailableBotIds()).thenReturn(emptyList())
         whenever(bots.findMatchableByUserIds(any())).thenReturn(Flux.just(BotPersona(-37, "Sprout Scout", true)))
@@ -56,7 +66,7 @@ class PracticeDifficultyControllerTest {
             .thenReturn(Flux.just(BotPersona(-60, "Golem Architect", true)))
         val player = UserDetailResponseDto(7L, "player", "")
         val opponent = UserDetailResponseDto(-60L, "Golem Architect", "")
-        whenever(matches.matchSelectedPractice(7L, -60L, mapOf(2L to 42L))).thenReturn(
+        whenever(matches.matchSelectedPractice(7L, -60L, mapOf(2L to 42L), MatchDeckMode.SELECTED)).thenReturn(
             MatchedInfoDto("matched", "test", player, opponent, "bot-123"),
         )
         client().post().uri("$path/SKILLED?pings=2:42").exchange().expectStatus().isOk.expectBody()

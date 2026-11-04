@@ -3,6 +3,7 @@ package com.wordonline.matching.matching.controller
 import com.wordonline.matching.auth.service.UserId
 import com.wordonline.matching.matching.domain.PracticeDifficulty
 import com.wordonline.matching.matching.dto.MatchedInfoDto
+import com.wordonline.matching.matching.dto.MatchDeckMode
 import com.wordonline.matching.matching.dto.PracticeDifficultyOverview
 import com.wordonline.matching.matching.service.GameMatchService
 import com.wordonline.matching.matching.service.PracticeDifficultyService
@@ -30,9 +31,13 @@ class PracticeDifficultyController(
         @UserId userId: Long?,
         @PathVariable id: String,
         @RequestParam(required = false) pings: String?,
+        @RequestParam(defaultValue = "SELECTED") deckMode: String,
     ): ResponseEntity<MatchedInfoDto> {
         val tier = PracticeDifficulty.entries.find { it.name == id } ?: return ResponseEntity.badRequest().build()
+        val mode = MatchDeckMode.entries.find { it.name == deckMode } ?: return ResponseEntity.badRequest().build()
         val bot = difficulties.select(tier) ?: return ResponseEntity.status(HttpStatus.CONFLICT).build()
-        return ResponseEntity.ok(matches.matchSelectedPractice(userId!!, bot, GameServerPingSelector.parse(pings)))
+        val match = matches.matchSelectedPractice(userId!!, bot, GameServerPingSelector.parse(pings), mode)
+            ?: return ResponseEntity.unprocessableEntity().build()
+        return ResponseEntity.ok(match)
     }
 }

@@ -29,6 +29,7 @@ import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.flow.Flow
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import java.time.Clock
@@ -58,12 +59,29 @@ class GameMatchService(
 
     suspend fun matchPractice(userId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
         val botId = practiceOpponentSelector.select(userId).botId
-        return matchSelectedPractice(userId, botId, pings)
+        return createPracticeSession(userId, botId, pings, null)
     }
 
-    suspend fun matchSelectedPractice(userId: Long, botId: Long, pings: Map<Long, Long>?): MatchedInfoDto {
+    suspend fun matchSelectedPractice(
+        userId: Long, botId: Long, pings: Map<Long, Long>?, deckMode: MatchDeckMode,
+    ): MatchedInfoDto? {
+        val cards = when (deckMode) {
+            MatchDeckMode.SELECTED -> deckService.validSelectedDeckCards(userId).awaitSingleOrNull() ?: return null
+            MatchDeckMode.RANDOM -> try {
+                randomDeckService.create(userId)
+            } catch (e: ResponseStatusException) {
+                if (e.statusCode == HttpStatus.UNPROCESSABLE_ENTITY) return null
+                throw e
+            }
+        }
+        return createPracticeSession(userId, botId, pings, cards)
+    }
+
+    private suspend fun createPracticeSession(
+        userId: Long, botId: Long, pings: Map<Long, Long>?, cards: List<Long>?,
+    ): MatchedInfoDto {
         val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-        val sessionDto = SessionDto.Practice(sessionId, userId, botId)
+        val sessionDto = SessionDto.Practice(sessionId, userId, botId, cards)
         return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
     }
 
