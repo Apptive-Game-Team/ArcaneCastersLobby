@@ -2,6 +2,7 @@ package com.wordonline.matching.deck.service;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.context.i18n.LocaleContext;
@@ -49,17 +50,17 @@ public class DeckService {
 
     @Transactional(readOnly = true)
     public Mono<Boolean> hasValidSelectedDeck(long userId) {
+        return validSelectedDeckCards(userId).hasElement();
+    }
+
+    @Transactional(readOnly = true)
+    public Mono<List<Long>> validSelectedDeckCards(long userId) {
         return userRepository.findById(userId)
-                .flatMap(user -> {
-                    if (user.getSelectedDeckId() == null) {
-                        return Mono.just(false);
-                    }
-                    return deckCardRepository.findAllByDeckId(user.getSelectedDeckId())
-                            .flatMap(deckCard -> Flux.range(0, deckCard.getCount()).map(i -> deckCard.getMagicId()))
-                            .collectList()
-                            .flatMap(cardIds -> deckValidator.isValid(userId, cardIds));
-                })
-                .defaultIfEmpty(false);
+                .filter(user -> user.getSelectedDeckId() != null)
+                .flatMap(user -> deckCardRepository.findAllByDeckId(user.getSelectedDeckId())
+                        .flatMap(card -> Flux.range(0, card.getCount()).map(i -> card.getMagicId()))
+                        .collectList())
+                .filterWhen(cards -> deckValidator.isValid(userId, cards));
     }
 
     @Transactional

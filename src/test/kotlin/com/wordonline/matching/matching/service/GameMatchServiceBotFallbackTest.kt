@@ -6,6 +6,7 @@ import com.wordonline.matching.deck.service.DeckService
 import com.wordonline.matching.matching.config.MatchTicketProperties
 import com.wordonline.matching.matching.domain.MatchTicket
 import com.wordonline.matching.matching.domain.MatchTicketState
+import com.wordonline.matching.matching.dto.MatchDeckMode
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.SessionDto
 import com.wordonline.matching.matching.dto.SessionType
@@ -35,13 +36,15 @@ class GameMatchServiceBotFallbackTest {
     private val matchingQueueRepository: MatchingQueueRepository = mock()
     private val matchTicketRepository: MatchTicketRepository = mock()
 
+    private val decks: DeckService = mock()
+    private val random: RandomDeckService = mock()
     private val service = GameMatchService(
         mock<PracticeOpponentSelector>(),
         botMemberMaker,
         legacyGameMatchService,
         userService,
-        mock<DeckService>(),
-        mock<RandomDeckService>(),
+        decks,
+        random,
         matchingQueueRepository,
         matchTicketRepository,
         MatchTicketProperties(),
@@ -88,6 +91,26 @@ class GameMatchServiceBotFallbackTest {
                 "boot-1",
             ),
         )
+    }
+
+    @Test
+    fun `빈 선택 덱은 세션 번호를 발급하지 않는다`() = runTest {
+        whenever(decks.validSelectedDeckCards(1L)).thenReturn(Mono.empty())
+        assertThat(service.matchSelectedPractice(1L, -7L, null, MatchDeckMode.SELECTED)).isNull()
+        verify(matchingQueueRepository, never()).nextSessionId()
+    }
+
+    @Test
+    fun `랜덤 덱 카드를 연습 세션으로 전달한다`() = runTest {
+        stubRound(emptyList())
+        val cards = (1L..15L).toList()
+        whenever(random.create(1L)).thenReturn(cards)
+        service.matchSelectedPractice(1L, -7L, null, MatchDeckMode.RANDOM)
+        val session = argumentCaptor<SessionDto>()
+        verify(legacyGameMatchService).createSession(session.capture(), any(), any())
+        assertThat(session.firstValue.sessionType).isEqualTo(SessionType.Practice)
+        assertThat(session.firstValue.leftDeckCardIds).isEqualTo(cards)
+        assertThat(session.firstValue.rightDeckCardIds).isNull()
     }
 
     @Test

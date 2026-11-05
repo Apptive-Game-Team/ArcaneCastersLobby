@@ -21,8 +21,8 @@ data class SessionDto(
         fun PVE(sessionId: String, userId: Long, scenarioId: Long) =
             SessionDto(sessionId, userId, null, SessionType.PVE, scenarioId)
 
-        fun Practice(sessionId: String, uid1: Long, uid2: Long) =
-            SessionDto(sessionId, uid1, uid2, SessionType.Practice, null)
+        fun Practice(sessionId: String, uid1: Long, uid2: Long, leftDeckCardIds: List<Long>? = null) =
+            SessionDto(sessionId, uid1, uid2, SessionType.Practice, null, leftDeckCardIds)
 
         fun from(
             sessionId: String,
