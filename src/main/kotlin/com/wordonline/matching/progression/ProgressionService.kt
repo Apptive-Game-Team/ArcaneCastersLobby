@@ -24,11 +24,11 @@ class ProgressionService(
         })
     }
 
-    suspend fun sync(userId: Long): ProgressionResponse = transaction.executeAndAwait {
-        syncLocked(userId, repository.lock(userId))
+    suspend fun sync(userId: Long, manualClaims: Boolean = false): ProgressionResponse = transaction.executeAndAwait {
+        syncLocked(userId, repository.lock(userId), manualClaims)
     }
 
-    suspend fun choose(userId: Long, faction: String): ProgressionResponse? = transaction.executeAndAwait {
+    suspend fun choose(userId: Long, faction: String, manualClaims: Boolean = false): ProgressionResponse? = transaction.executeAndAwait {
         val state = repository.lock(userId)
         if (state.faction != null && state.faction != faction) return@executeAndAwait null
         if (state.faction == null) {
@@ -38,10 +38,57 @@ class ProgressionService(
             magics.forEach { repository.grantMagic(userId, it.id, 3) }
             repository.createStarterDeck(userId, faction)
         }
-        syncLocked(userId, state.copy(faction = faction))
+        syncLocked(userId, state.copy(faction = faction), manualClaims)
     }
 
-    private suspend fun syncLocked(userId: Long, state: ProgressionState): ProgressionResponse {
+    suspend fun pendingRewards(userId: Long, manualClaims: Boolean = false): PendingProgressionRewardsResponse = transaction.executeAndAwait {
+        syncLocked(userId, repository.lock(userId), manualClaims)
+        val state = repository.lock(userId)
+        PendingProgressionRewardsResponse(manualClaims, state.baselineLevel, repository.claimedLevels(userId),
+            repository.pendingRewardClaims(userId).map { claim ->
+                PendingProgressionReward(claim.id, claim.source, claim.level, claim.createdAt,
+                    repository.rewardItems(claim.id).map { it.reward })
+            })
+    }
+
+    suspend fun claimReward(userId: Long, claimId: Long, manualClaims: Boolean = false): ProgressionClaimResponse? = transaction.executeAndAwait {
+        repository.lock(userId)
+        val claim = repository.lockRewardClaim(userId, claimId) ?: return@executeAndAwait null
+        val result = claimLocked(userId, claim)
+        if (!manualClaims) drainPendingLocked(userId)
+        result
+    }
+
+    private suspend fun claimLocked(userId: Long, claim: ProgressionRepository.RewardClaim): ProgressionClaimResponse {
+        val items = repository.rewardItems(claim.id)
+        if (claim.claimed) return ProgressionClaimResponse(claim.id, true,
+            items.map { it.reward.copy(amount = checkNotNull(it.grantedAmount)) })
+        val owned = repository.ownsSource(userId, claim.source)
+        val receipt = items.map { item ->
+            val reward = item.reward
+            val amount = when {
+                owned -> 0
+                reward.rewardType == "MAGIC" -> repository.grantMagicDelta(userId, reward.rewardId, reward.amount)
+                reward.rewardType == "CHEST" -> if (repository.grantSnapshotChest(userId, claim.source, reward)) 1 else 0
+                else -> error("Unsupported progression reward ${reward.rewardType}")
+            }
+            repository.saveReceipt(claim.id, item.position, amount)
+            reward.copy(amount = amount)
+        }
+        repository.finishRewardClaim(claim.id)
+        return ProgressionClaimResponse(claim.id, false, receipt)
+    }
+
+    private suspend fun drainPendingLocked(userId: Long): Int {
+        var chests = 0
+        for (pending in repository.pendingRewardClaims(userId)) {
+            val claim = checkNotNull(repository.lockRewardClaim(userId, pending.id))
+            chests += claimLocked(userId, claim).rewards.filter { it.rewardType == "CHEST" }.sumOf { it.amount }
+        }
+        return chests
+    }
+
+    private suspend fun syncLocked(userId: Long, state: ProgressionState, manualClaims: Boolean): ProgressionResponse {
         var gained = 0L
         var chests = 0
         if (state.faction != null) {
@@ -50,17 +97,18 @@ class ProgressionService(
                 if (repository.recordXp(userId, match.id, xp)) gained += xp
             }
             val level = ProgressionPolicy.level(state.xp + gained)
-            for (newLevel in state.level + 1..level) {
-                if (newLevel % 5 == 0) {
-                    val magics = repository.fixedMagics(state.faction, newLevel)
-                    check(magics.size == 1) { "Missing level $newLevel reward for ${state.faction}" }
-                    magics.forEach { repository.grantMagic(userId, it.id, 2) }
-                }
-                if (repository.issueChest(userId, "level:$newLevel", ProgressionPolicy.slots(newLevel))) chests++
+            for (newLevel in maxOf(state.level, state.baselineLevel) + 1..level) {
+                val magics = if (newLevel % 5 == 0) repository.fixedMagics(state.faction, newLevel) else emptyList()
+                check(newLevel % 5 != 0 || magics.size == 1) { "Missing level $newLevel reward for ${state.faction}" }
+                repository.enqueueReward(userId, "level:$newLevel", newLevel, magics, ProgressionPolicy.slots(newLevel))
             }
             repository.save(userId, state.xp + gained, level)
             val date = LocalDate.now(ZoneId.of("Asia/Seoul"))
-            if (repository.issueChest(userId, "daily:$date", 3)) chests++
+            repository.enqueueReward(userId, "daily:$date", null, emptyList(), 3)
+            if (!manualClaims) {
+                chests = drainPendingLocked(userId)
+                repository.advanceBaseline(userId, level)
+            }
         }
         val xp = state.xp + gained
         val level = ProgressionPolicy.level(xp)

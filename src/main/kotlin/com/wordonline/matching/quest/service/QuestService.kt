@@ -72,7 +72,7 @@ class QuestService(
      * is rolled back to `IN_PROGRESS`, logged, and left for the next call; the other quests still
      * complete, because their rewards are already committed and the client should hear about them.
      */
-    suspend fun checkQuestsWithRewards(userId: Long): List<QuestRewardDto> {
+    suspend fun checkQuestsWithRewards(userId: Long, manualClaims: Boolean = false): List<QuestRewardDto> {
         userQuestRepository.insertMissing(userId).awaitSingle()
 
         val metQuests = questRepository.findClaimable(userId).asFlow().toList()
@@ -91,6 +91,7 @@ class QuestService(
 
         return metQuests.flatMap { quest ->
             val rewards = rewardsByQuestId[quest.id].orEmpty()
+            if (manualClaims && requiresManualClaim(rewards)) return@flatMap emptyList()
             try {
                 transactionalOperator.executeAndAwait {
                     when (val outcome = claimAndGrant(userId, quest, rewards)) {
@@ -121,7 +122,9 @@ class QuestService(
      * for it), no row means the user has no `users` row ([QuestClaimResult.NotFound]). A grantor that
      * throws rolls the claim back and the exception reaches the caller.
      */
-    suspend fun claimQuest(userId: Long, questId: Long): QuestClaimResult {
+    // 명시 수령은 capability와 관계없이 같은 원자적 claim 경로를 사용한다.
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun claimQuest(userId: Long, questId: Long, manualClaims: Boolean = false): QuestClaimResult {
         val quest = questRepository.findActiveById(questId).awaitSingleOrNull() ?: return QuestClaimResult.NotFound
         val progress = measureProgress(userId, quest)
         if (progress == null || progress < quest.requireValue) {
@@ -228,7 +231,7 @@ class QuestService(
      * Read-only. Every quest that is not `DEPRECATED`, ordered by quest id, with this user's state
      * and progress and the quest's rewards. Rewards come from one query for all quests.
      */
-    suspend fun findMyQuests(userId: Long): List<QuestSummaryResponseDto> {
+    suspend fun findMyQuests(userId: Long, manualClaims: Boolean = false): List<QuestSummaryResponseDto> {
         val (quests, rewardsByQuestId, storedStates) = coroutineScope {
             val quests = async { questRepository.findAllActive().asFlow().toList() }
             val rewards = async {
@@ -254,7 +257,11 @@ class QuestService(
                 state = QuestState.derive(storedState, progress),
                 progress = progress,
                 requireValue = quest.requireValue,
-                claimMode = quest.claimMode,
+                claimMode = if (manualClaims && quest.hasKnownClaimMode && requiresManualClaim(rewardsByQuestId[quest.id].orEmpty())) {
+                    Quest.MANUAL_CLAIM_MODE
+                } else {
+                    quest.claimMode
+                },
                 // The list holds no DEPRECATED quest, so that part of the rule is the query's filter.
                 claimable = measuredProgress != null &&
                     measuredProgress >= quest.requireValue &&
@@ -270,6 +277,9 @@ class QuestService(
             )
         }
     }
+
+    private fun requiresManualClaim(rewards: List<QuestReward>): Boolean =
+        rewards.any { it.rewardType in setOf("MAGIC", "CARD", "CHEST") }
 
     /**
      * Progress through the registered condition, or null when it cannot be measured: no condition

@@ -11,6 +11,7 @@ import com.wordonline.matching.quest.dto.QuestSummaryResponseDto
 import com.wordonline.matching.quest.dto.QuestSummaryRewardDto
 import com.wordonline.matching.quest.service.QuestClaimResult
 import com.wordonline.matching.quest.service.QuestService
+import com.wordonline.matching.progression.RewardClaimPolicy
 import com.wordonline.matching.session.service.LegacyGameMatchService
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -21,6 +22,7 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest
+import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient
 import org.springframework.context.annotation.Import
 import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.csrf
 import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockJwt
@@ -29,6 +31,7 @@ import org.springframework.test.web.reactive.server.WebTestClient
 
 /** Response shapes of the quest endpoints, which the Unity client parses. */
 @WebFluxTest(controllers = [QuestProgressController::class, QuestClaimController::class, UserController::class])
+@AutoConfigureWebTestClient(timeout = "PT30S")
 @Import(UserIdResolver::class)
 class QuestEndpointsTest {
 
@@ -46,6 +49,9 @@ class QuestEndpointsTest {
 
     @MockitoBean
     private lateinit var legacyGameMatchService: LegacyGameMatchService
+
+    @MockitoBean
+    private lateinit var rewardClaimPolicy: RewardClaimPolicy
 
     private val userId = 1L
 
@@ -210,12 +216,49 @@ class QuestEndpointsTest {
     }
 
     @Test
+    fun `수동 capability는 목록과 check와 claim 서비스까지 전달하고 재수령 409는 유지한다`() {
+        whenever(rewardClaimPolicy.manual("manual-v1")).thenReturn(true)
+        runBlocking {
+            whenever(questService.findMyQuests(userId, manualClaims = true)).thenReturn(emptyList())
+            whenever(questService.checkQuestsWithRewards(userId, manualClaims = true)).thenReturn(emptyList())
+            whenever(questService.claimQuest(userId, 11L, manualClaims = true)).thenReturn(QuestClaimResult.AlreadyClaimed)
+        }
+
+        client().get().uri("/api/users/mine/quests").header("X-Reward-Claims", "manual-v1")
+            .exchange().expectStatus().isOk.expectBody().json("[]")
+        client().mutateWith(csrf()).post().uri("/api/users/mine/quests/check")
+            .header("X-Reward-Claims", "manual-v1")
+            .exchange().expectStatus().isOk.expectBody().json("""{"rewards":[]}""")
+        client().mutateWith(csrf()).post().uri("/api/users/mine/quests/11/claim")
+            .header("X-Reward-Claims", "manual-v1")
+            .exchange().expectStatus().isEqualTo(409)
+
+        verifyBlocking(questService) { findMyQuests(userId, manualClaims = true) }
+        verifyBlocking(questService) { checkQuestsWithRewards(userId, manualClaims = true) }
+        verifyBlocking(questService) { claimQuest(userId, 11L, manualClaims = true) }
+    }
+
+    @Test
+    fun `서버가 capability를 비활성으로 판단하면 헤더가 있어도 자동 호환 모드를 전달한다`() {
+        whenever(rewardClaimPolicy.manual("manual-v1")).thenReturn(false)
+        runBlocking {
+            whenever(questService.checkQuestsWithRewards(userId, manualClaims = false)).thenReturn(emptyList())
+        }
+
+        client().mutateWith(csrf()).post().uri("/api/users/mine/quests/check")
+            .header("X-Reward-Claims", "manual-v1")
+            .exchange().expectStatus().isOk
+
+        verifyBlocking(questService) { checkQuestsWithRewards(userId, manualClaims = false) }
+    }
+
+    @Test
     @DisplayName("인증하지_않은_claim_은_401_이고_서비스를_부르지_않는다")
     fun claimQuest_RequiresAuthentication() {
         webTestClient.mutateWith(csrf()).post().uri("/api/users/mine/quests/{questId}/claim", 11L)
             .exchange()
             .expectStatus().isUnauthorized
 
-        verifyBlocking(questService, never()) { claimQuest(any(), any()) }
+        verifyBlocking(questService, never()) { claimQuest(any(), any(), any()) }
     }
 }
