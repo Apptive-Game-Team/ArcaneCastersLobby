@@ -10,6 +10,7 @@ import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.quest.dto.QuestCheckResponseDto
 import com.wordonline.matching.quest.dto.QuestSummaryResponseDto
 import com.wordonline.matching.quest.service.QuestService
+import com.wordonline.matching.progression.RewardClaimPolicy
 import com.wordonline.matching.session.service.LegacyGameMatchService
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 
 @RequestMapping("/api/users")
@@ -29,6 +31,7 @@ class UserController(
     private val userStatisticsService: UserStatisticsService,
     private val gameMatchService: LegacyGameMatchService,
     private val questService: QuestService,
+    private val rewardClaimPolicy: RewardClaimPolicy = RewardClaimPolicy(),
 ) {
     @GetMapping("/mine")
     suspend fun getUser(@UserId userId: Long?): UserResponseDto =
@@ -64,10 +67,16 @@ class UserController(
         gameMatchService.getMatchInfo(userId!!)
 
     @GetMapping("/mine/quests")
-    suspend fun getMyQuests(@UserId userId: Long?): List<QuestSummaryResponseDto> =
-        questService.findMyQuests(userId!!)
+    suspend fun getMyQuests(
+        @UserId userId: Long?,
+        @RequestHeader(value = "X-Reward-Claims", required = false) capability: String? = null,
+    ): List<QuestSummaryResponseDto> =
+        questService.findMyQuests(userId!!, manualClaims = rewardClaimPolicy.manual(capability))
 
     @PostMapping("/mine/quests/check")
-    suspend fun checkMyQuests(@UserId userId: Long?): QuestCheckResponseDto =
-        QuestCheckResponseDto(questService.checkQuestsWithRewards(userId!!))
+    suspend fun checkMyQuests(
+        @UserId userId: Long?,
+        @RequestHeader(value = "X-Reward-Claims", required = false) capability: String? = null,
+    ): QuestCheckResponseDto =
+        QuestCheckResponseDto(questService.checkQuestsWithRewards(userId!!, manualClaims = rewardClaimPolicy.manual(capability)))
 }
