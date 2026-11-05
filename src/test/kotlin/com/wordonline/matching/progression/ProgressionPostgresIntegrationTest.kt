@@ -15,6 +15,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.r2dbc.connection.R2dbcTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
+import java.time.Instant
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @EnabledIfEnvironmentVariable(named = "QUEST_IT_DATABASE_URL", matches = ".+")
@@ -43,11 +44,12 @@ class ProgressionPostgresIntegrationTest {
     private fun chests() = ChestService(ChestRepository(db), QuestRegistry(emptyList(), emptyList()), transaction, repository, service)
 
     @Test
-    fun `서버에서 끝난 매칭 경기만 한 번 반영하고 친선전과 연습은 제외한다`(): Unit = runBlocking {
+    fun `등록된 매칭과 연습만 반영하고 친선전과 PvE와 관리자 대전은 제외한다`(): Unit = runBlocking {
         service.choose(user, "HELL")
-        for ((suffix, type) in listOf("ranked" to "PVP", "friend" to "PVP", "practice" to "Practice")) {
+        for ((suffix, type) in listOf("ranked" to "PVP", "friend" to "PVP", "practice" to "Practice",
+            "pve" to "PVE", "admin" to "Practice", "past-practice" to "Practice")) {
             val sid = "$user-$suffix"
-            if (suffix != "friend") repository.registerMatch(sid, user)
+            if (suffix in setOf("ranked", "practice", "pve")) repository.registerMatch(sid, user)
             val gameId = number("""INSERT INTO statistic_games(win_user_id,loss_user_id,duration,game_type,server_version,event_schema_version)
                 VALUES ($user,0,180,'$type','test',1) RETURNING id""")
             exec("""INSERT INTO statistic_game_sessions(session_id,left_user_id,right_user_id,game_type,server_domain,server_port,
@@ -55,8 +57,77 @@ class ProgressionPostgresIntegrationTest {
                 VALUES ('$sid',$user,0,'$type','localhost',1,'test','test','COMPLETED',$gameId,now())""")
         }
         val results = listOf(async { service.sync(user) }, async { service.sync(user) }).awaitAll()
-        assertThat(results.sumOf { it.gainedXp }).isEqualTo(100)
-        assertThat(service.sync(user).xp).isEqualTo(100)
+        assertThat(results.sumOf { it.gainedXp }).isEqualTo(200)
+        assertThat(service.sync(user).xp).isEqualTo(200)
+        assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user")).isEqualTo(2)
+    }
+
+    private suspend fun practiceResult(suffix: String, status: String, winner: Long?, loser: Long?, reason: String? = null) {
+        val sid = "$user-$suffix"
+        repository.registerMatch(sid, user)
+        repository.registerMatch(sid, user)
+        val gameId = if (status == "ABANDONED") null else number("""INSERT INTO statistic_games
+            (win_user_id,loss_user_id,duration,game_type,server_version,event_schema_version,outcome)
+            VALUES (${winner ?: "NULL"},${loser ?: "NULL"},180,'Practice','test',1,'${if (status == "DRAW") "DRAW" else "WIN"}') RETURNING id""")
+        exec("""INSERT INTO statistic_game_sessions(session_id,left_user_id,right_user_id,game_type,server_domain,server_port,
+            server_instance_id,server_version,status,end_reason,statistic_game_id,ended_at)
+            VALUES ('$sid',-7,$user,'Practice','localhost',1,'test','test','$status',
+            ${reason?.let { "'$it'" } ?: "NULL"},${gameId ?: "NULL"},now())""")
+    }
+
+    @Test
+    fun `연습의 승패와 무승부와 종료 사유를 기존 XP 정책으로 한번만 반영한다`(): Unit = runBlocking {
+        service.choose(user, "HELL")
+        practiceResult("win", "COMPLETED", user, -7)
+        practiceResult("loss", "COMPLETED", -7, user)
+        practiceResult("draw", "DRAW", null, null)
+        practiceResult("abandoned", "ABANDONED", null, null)
+        for (reason in listOf("SURRENDER", "DISCONNECT", "FORFEIT")) {
+            practiceResult("loss-$reason", "COMPLETED", -7, user, reason)
+            practiceResult("win-$reason", "COMPLETED", user, -7, reason)
+        }
+
+        val results = listOf(async { service.sync(user) }, async { service.sync(user) }).awaitAll()
+        assertThat(results.sumOf { it.gainedXp }).isEqualTo(475)
+        assertThat(service.sync(user).gainedXp).isZero()
+        assertThat(service.sync(user).xp).isEqualTo(475)
+        assertThat(number("SELECT COUNT(*) FROM progression_matches WHERE user_id=$user")).isEqualTo(10)
+        assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user")).isEqualTo(10)
+        assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(4)
+        assertThat(number("SELECT COUNT(*) FROM user_chests WHERE user_id=$user AND reward_source LIKE 'level:%'")).isEqualTo(4)
+        assertThat(number("SELECT count FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='rock_mage')")).isEqualTo(2)
+    }
+
+    @Test
+    fun `미완료와 등록 전 연습은 지급하지 않고 완료된 경기만 나중에 반영한다`(): Unit = runBlocking {
+        service.choose(user, "HELL")
+        practiceResult("unfinished", "COMPLETED", user, -7)
+        exec("UPDATE statistic_game_sessions SET status='IN_PROGRESS',statistic_game_id=NULL,ended_at=NULL WHERE session_id='$user-unfinished'")
+        practiceResult("stale", "COMPLETED", user, -7)
+        exec("UPDATE statistic_game_sessions SET started_at=now()-interval '1 day' WHERE session_id='$user-stale'")
+        assertThat(service.sync(user).gainedXp).isZero()
+        exec("""UPDATE statistic_game_sessions SET status='ABANDONED',ended_at=now() WHERE session_id='$user-unfinished'""")
+        assertThat(service.sync(user).gainedXp).isZero()
+        assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user")).isEqualTo(1)
+    }
+
+    @Test
+    fun `연습 등록이 30초 지연돼도 요청 이후 경기만 지급하고 과거 경기는 제외한다`(): Unit = runBlocking {
+        service.choose(user, "HELL")
+        exec("UPDATE player_progression SET created_at=now()-interval '1 hour' WHERE user_id=$user")
+        val requestedAt = Instant.now().minusSeconds(31)
+        practiceResult("delayed", "COMPLETED", user, -7)
+        practiceResult("before-request", "COMPLETED", user, -7)
+        exec("DELETE FROM progression_matches WHERE user_id=$user")
+        repository.registerMatch("$user-delayed", user, matchRequestedAt = requestedAt)
+        repository.registerMatch("$user-before-request", user, matchRequestedAt = requestedAt)
+        db.sql("UPDATE statistic_game_sessions SET started_at=:started WHERE session_id=:sid")
+            .bind("started", requestedAt.plusSeconds(1)).bind("sid", "$user-delayed").fetch().rowsUpdated().awaitSingle()
+        db.sql("UPDATE statistic_game_sessions SET started_at=:started WHERE session_id=:sid")
+            .bind("started", requestedAt.minusSeconds(60)).bind("sid", "$user-before-request").fetch().rowsUpdated().awaitSingle()
+
+        assertThat(service.sync(user).gainedXp).isEqualTo(100)
+        assertThat(service.sync(user).gainedXp).isZero()
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user")).isEqualTo(1)
     }
 

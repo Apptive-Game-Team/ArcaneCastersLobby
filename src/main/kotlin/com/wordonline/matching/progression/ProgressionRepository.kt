@@ -7,6 +7,7 @@ import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
+import java.time.Instant
 
 data class ProgressionState(val faction: String?, val xp: Long, val level: Int, val currency: Long)
 data class ProgressionMagic(val id: Long, val name: String)
@@ -93,10 +94,16 @@ class ProgressionRepository(private val db: DatabaseClient) {
         query("SELECT reward_slots FROM user_chests WHERE user_id=:uid AND id=:id", "uid" to userId, "id" to chestId)
             .map { r, _ -> r.long("reward_slots").toInt() }.one().awaitSingle()
 
-    suspend fun registerMatch(sessionId: String, userId: Long) {
+    suspend fun registerMatch(sessionId: String, userId: Long, matchRequestedAt: Instant? = null) {
         if (userId <= 0) return
-        query("INSERT INTO progression_matches(session_id,user_id) VALUES (:sid,:uid) ON CONFLICT DO NOTHING",
-            "sid" to sessionId, "uid" to userId).fetch().rowsUpdated().awaitSingle()
+        if (matchRequestedAt == null) {
+            query("INSERT INTO progression_matches(session_id,user_id) VALUES (:sid,:uid) ON CONFLICT DO NOTHING",
+                "sid" to sessionId, "uid" to userId).fetch().rowsUpdated().awaitSingle()
+        } else {
+            // 세션 준비 응답이 늦어도 요청 이후 시작된 경기는 과거 경기로 제외하지 않는다.
+            query("INSERT INTO progression_matches(session_id,user_id,created_at) VALUES (:sid,:uid,:requestedAt) ON CONFLICT DO NOTHING",
+                "sid" to sessionId, "uid" to userId, "requestedAt" to matchRequestedAt).fetch().rowsUpdated().awaitSingle()
+        }
     }
     suspend fun pendingMatches(userId: Long): List<ProgressionMatch> =
         query("""SELECT s.id,g.win_user_id,g.loss_user_id,s.status,s.end_reason
@@ -105,7 +112,7 @@ class ProgressionRepository(private val db: DatabaseClient) {
             JOIN player_progression u ON u.user_id=p.user_id AND s.started_at>=u.created_at
             LEFT JOIN statistic_games g ON g.id=s.statistic_game_id
             LEFT JOIN progression_match_rewards r ON r.session_record_id=s.id AND r.user_id=:uid
-            WHERE (s.left_user_id=:uid OR s.right_user_id=:uid) AND s.game_type='PVP'
+            WHERE (s.left_user_id=:uid OR s.right_user_id=:uid) AND s.game_type IN ('PVP','Practice')
               AND s.started_at>=p.created_at-interval '10 seconds'
               AND s.status IN ('COMPLETED','DRAW','ABANDONED') AND r.user_id IS NULL
               AND (g.id IS NOT NULL OR s.status='ABANDONED') ORDER BY s.id""", "uid" to userId)
