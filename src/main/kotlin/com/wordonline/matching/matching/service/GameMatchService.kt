@@ -80,9 +80,12 @@ class GameMatchService(
     private suspend fun createPracticeSession(
         userId: Long, botId: Long, pings: Map<Long, Long>?, cards: List<Long>?,
     ): MatchedInfoDto {
+        val matchRequestedAt = Instant.now(clock)
         val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
         val sessionDto = SessionDto.Practice(sessionId, userId, botId, cards)
-        return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
+        val placement = legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings))
+        progressionRepository.registerMatch(sessionId, userId, matchRequestedAt = matchRequestedAt)
+        return placement.matchInfo
     }
 
     suspend fun matchBots(leftBotId: Long, rightBotId: Long): MatchedInfoDto {
