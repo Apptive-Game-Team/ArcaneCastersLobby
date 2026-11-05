@@ -74,8 +74,8 @@ class ChestService(
      * it, so the chest stays unopened and the error reaches the caller. Two concurrent opens of the
      * same chest grant once: the second waits on the row lock and then finds it opened.
      */
-    suspend fun openChest(userId: Long, userChestId: Long): ChestOpenResult {
-        progressionService.sync(userId)
+    suspend fun openChest(userId: Long, userChestId: Long, manualClaims: Boolean = false): ChestOpenResult {
+        progressionService.sync(userId, manualClaims)
         return transactionalOperator.executeAndAwait {
             val state = progressionRepository.lock(userId)
             val chestId = chestRepository.claimUnopened(userChestId, userId)

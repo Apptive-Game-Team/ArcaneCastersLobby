@@ -28,7 +28,7 @@ class ProgressionPostgresIntegrationTest {
 
     @BeforeAll
     fun setup(): Unit = runBlocking {
-        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 121)
+        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 124)
         db = DatabaseClient.create(factory)
         repository = ProgressionRepository(db)
         transaction = TransactionalOperator.create(R2dbcTransactionManager(factory))
@@ -152,6 +152,7 @@ class ProgressionPostgresIntegrationTest {
     fun `지난 일일 상자는 보존하고 오늘 상자는 한번만 지급한다`(): Unit = runBlocking {
         service.choose(user, "NATURE")
         exec("UPDATE user_chests SET reward_source='daily:2000-01-01' WHERE user_id=$user")
+        exec("UPDATE progression_reward_claims SET source='daily:2000-01-01' WHERE user_id=$user")
         assertThat(service.sync(user).grantedChests).isEqualTo(1)
         assertThat(service.sync(user).grantedChests).isZero()
         assertThat(number("SELECT COUNT(*) FROM user_chests WHERE user_id=$user AND opened_at IS NULL")).isEqualTo(2)

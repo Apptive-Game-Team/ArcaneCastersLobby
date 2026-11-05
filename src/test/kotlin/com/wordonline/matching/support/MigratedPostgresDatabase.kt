@@ -29,9 +29,9 @@ object MigratedPostgresDatabase {
      * Fails when the migration directory holds no `V<requiredVersion>_` file, so a stale directory
      * is reported instead of failing later on a missing column.
      */
-    suspend fun build(databaseName: String, requiredVersion: Int): ConnectionFactory {
+    suspend fun build(databaseName: String, requiredVersion: Int, throughVersion: Int = Int.MAX_VALUE): ConnectionFactory {
         val baseOptions = ConnectionFactoryOptions.parse(System.getenv(DATABASE_URL_VARIABLE))
-        val migrations = migrationFiles(requiredVersion)
+        val migrations = migrationFiles(requiredVersion).filter { versionOf(it) <= throughVersion }
 
         withConnection(ConnectionFactories.get(directOptions(baseOptions, baseOptions.getValue(ConnectionFactoryOptions.DATABASE) as String))) {
             executeSimple(it, "DROP DATABASE IF EXISTS $databaseName WITH (FORCE)")

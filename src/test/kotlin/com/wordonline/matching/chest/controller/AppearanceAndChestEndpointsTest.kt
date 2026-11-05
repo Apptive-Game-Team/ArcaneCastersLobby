@@ -9,6 +9,7 @@ import com.wordonline.matching.chest.dto.ChestRewardDto
 import com.wordonline.matching.chest.dto.UnopenedChestResponseDto
 import com.wordonline.matching.chest.service.ChestOpenResult
 import com.wordonline.matching.chest.service.ChestService
+import com.wordonline.matching.progression.RewardClaimPolicy
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -40,9 +41,23 @@ class AppearanceAndChestEndpointsTest {
     @MockitoBean
     private lateinit var chestService: ChestService
 
+    @MockitoBean
+    private lateinit var claimPolicy: RewardClaimPolicy
+
     private val userId = 1L
 
     private fun client() = webTestClient.mutateWith(mockJwt().jwt { it.claim("memberId", userId) })
+
+    @Test
+    fun `상자 개봉도 수동 capability를 서비스에 전달한다`() {
+        runBlocking {
+            whenever(claimPolicy.manual("manual-v1")).thenReturn(true)
+            whenever(chestService.openChest(userId, 99L, true)).thenReturn(ChestOpenResult.NotFound)
+        }
+        client().mutateWith(csrf()).post().uri("/api/users/mine/chests/99/open")
+            .header("X-Reward-Claims", "manual-v1").exchange().expectStatus().isNotFound
+        verifyBlocking(chestService) { openChest(userId, 99L, true) }
+    }
 
     @Test
     @DisplayName("외형_목록은_catalog_전체를_key_sortOrder_owned_selected_로_내려준다")

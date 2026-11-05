@@ -182,6 +182,81 @@ class QuestServiceTest {
     }
 
     @Test
+    fun `수동 모드 check는 마법 카드 상자가 포함된 퀘스트를 지급하지 않고 장식 자동 지급은 유지한다`() = runTest {
+        whenever(questRepository.findClaimable(userId)).thenReturn(
+            Flux.fromIterable((1L..5L).map { quest(it, requireValue = 1) }),
+        )
+        condition.progressByQuest.putAll((1L..5L).associateWith { 1 })
+        whenever(questRewardRepository.findAllByQuestIds((1L..5L).toList())).thenReturn(
+            Flux.just(
+                reward(10L, 1L, "MAGIC", 1L),
+                reward(20L, 2L, "CARD", 2L),
+                reward(30L, 3L, "CHEST", 3L),
+                reward(40L, 4L, "MAGIC", 4L),
+                reward(41L, 4L, "DECORATION", 4L),
+                reward(50L, 5L, "DECORATION", 5L),
+            ),
+        )
+        whenever(userQuestRepository.claim(userId, 5L)).thenReturn(Mono.just(1L))
+
+        assertThat(questService.checkQuestsWithRewards(userId, manualClaims = true))
+            .containsExactly(QuestRewardDto("DECORATION", 5L, null, 1, 5L))
+        verify(userQuestRepository).insertMissing(userId)
+        (1L..4L).forEach { verify(userQuestRepository, never()).claim(userId, it) }
+        assertThat(magicGrantor.granted).isEmpty()
+        assertThat(decorationGrantor.granted).hasSize(1)
+        assertThat(transactionalOperator.commits).isEqualTo(1)
+    }
+
+    @Test
+    fun `수동 모드의 명시 claim과 재시도는 기존 지급과 AlreadyClaimed 계약을 유지한다`() = runTest {
+        whenever(questRepository.findActiveById(4L)).thenReturn(Mono.just(quest(4L, requireValue = 1)))
+        condition.progressByQuest[4L] = 1
+        whenever(questRewardRepository.findAllByQuestIds(listOf(4L)))
+            .thenReturn(Flux.just(reward(40L, 4L, "MAGIC", 8L, amount = 2)))
+        whenever(userQuestRepository.claim(userId, 4L)).thenReturn(Mono.just(1L), Mono.just(0L))
+        whenever(userQuestRepository.findByUserIdAndQuestId(userId, 4L))
+            .thenReturn(Mono.just(UserQuest(4L, userId, 4L, QuestState.COMPLETED)))
+
+        assertThat(questService.claimQuest(userId, 4L, manualClaims = true))
+            .isEqualTo(QuestClaimResult.Claimed(listOf(QuestSummaryRewardDto("MAGIC", 8L, null, 2))))
+        assertThat(questService.claimQuest(userId, 4L, manualClaims = true))
+            .isEqualTo(QuestClaimResult.AlreadyClaimed)
+        assertThat(magicGrantor.granted).hasSize(1)
+    }
+
+    @Test
+    fun `수동 목록은 대상 보상만 MANUAL로 표시하고 기존 완료와 모르는 모드는 보존한다`() = runTest {
+        whenever(questRepository.findAllActive()).thenReturn(
+            Flux.just(
+                quest(1L, requireValue = 1), quest(2L, requireValue = 1),
+                quest(3L, requireValue = 1), quest(4L, requireValue = 1),
+                quest(5L, requireValue = 1, claimMode = "MANUAL"),
+                quest(6L, requireValue = 1, claimMode = "FUTURE"),
+            ),
+        )
+        whenever(questRewardRepository.findAllOfActiveQuests()).thenReturn(
+            Flux.just(
+                reward(10L, 1L, "MAGIC", 1L), reward(20L, 2L, "CARD", 2L),
+                reward(30L, 3L, "CHEST", 3L), reward(40L, 4L, "DECORATION", 4L),
+                reward(50L, 5L, "MAGIC", 5L), reward(60L, 6L, "MAGIC", 6L),
+            ),
+        )
+        whenever(userQuestRepository.findAllByUserId(userId))
+            .thenReturn(Flux.just(UserQuest(1L, userId, 1L, QuestState.COMPLETED)))
+        condition.progressByQuest.putAll((1L..6L).associateWith { 1 })
+
+        val quests = questService.findMyQuests(userId, manualClaims = true)
+
+        assertThat(quests.map { it.claimMode }).containsExactly("MANUAL", "MANUAL", "MANUAL", "AUTO", "MANUAL", "FUTURE")
+        assertThat(quests.first().state).isEqualTo(QuestState.COMPLETED)
+        assertThat(quests.first().claimable).isFalse()
+        assertThat(quests.drop(1).all { it.claimable }).isTrue()
+        verify(userQuestRepository, never()).insertMissing(any())
+        verify(userQuestRepository, never()).claim(any(), any())
+    }
+
+    @Test
     @DisplayName("보상이_여러_개인_퀘스트는_보상마다_QuestRewardDto_하나를_돌려준다")
     fun checkQuestsWithRewards_MultiRewardQuest() = runTest {
         whenever(questRepository.findClaimable(userId)).thenReturn(Flux.just(quest(1L, requireValue = 1)))
