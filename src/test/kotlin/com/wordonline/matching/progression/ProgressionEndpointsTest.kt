@@ -24,6 +24,20 @@ class ProgressionEndpointsTest {
     @MockitoBean private lateinit var claimPolicy: RewardClaimPolicy
 
     @Test
+    fun `경기별 정산은 토큰의 사용자와 세션으로 XP 내역을 조회한다`() {
+        runBlocking {
+            whenever(service.syncMatch(7, false, "match-42")).thenReturn(
+                ProgressionResponse("HELL", 2, 125, 65, 70, 0, matchXp = ProgressionMatchXp(100, 25)),
+            )
+        }
+        client.mutateWith(mockJwt().jwt { it.claim("memberId", 7L) }).mutateWith(csrf())
+            .post().uri("/api/users/mine/progression/sync?sessionId=match-42")
+            .exchange().expectStatus().isOk.expectBody()
+            .jsonPath("$.matchXp.baseXp").isEqualTo(100)
+            .jsonPath("$.matchXp.firstWinBonusXp").isEqualTo(25)
+    }
+
+    @Test
     fun `성장 동기화와 세력 선택도 수동 capability를 유지한다`() {
         val result = ProgressionResponse("HELL", 1, 0, 0, 100, 0)
         runBlocking {
