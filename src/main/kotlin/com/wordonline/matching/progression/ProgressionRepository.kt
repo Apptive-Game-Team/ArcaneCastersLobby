@@ -1,6 +1,7 @@
 package com.wordonline.matching.progression
 
 import io.r2dbc.spi.Row
+import java.time.LocalDate
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactor.awaitSingle
@@ -11,7 +12,10 @@ import java.time.Instant
 
 data class ProgressionState(val faction: String?, val xp: Long, val level: Int, val currency: Long, val baselineLevel: Int = level)
 data class ProgressionMagic(val id: Long, val name: String)
-data class ProgressionMatch(val id: Long, val winner: Long?, val loser: Long?, val status: String, val reason: String?)
+data class ProgressionMatch(
+    val id: Long, val winner: Long?, val loser: Long?, val status: String, val reason: String?,
+    val rankedEndDate: LocalDate?,
+)
 
 @Repository
 class ProgressionRepository(private val db: DatabaseClient) {
@@ -179,7 +183,8 @@ class ProgressionRepository(private val db: DatabaseClient) {
         }
     }
     suspend fun pendingMatches(userId: Long): List<ProgressionMatch> =
-        query("""SELECT s.id,g.win_user_id,g.loss_user_id,s.status,s.end_reason
+        query("""SELECT s.id,g.win_user_id,g.loss_user_id,s.status,s.end_reason,
+            CASE WHEN s.game_type='PVP' THEN (s.ended_at AT TIME ZONE 'Asia/Seoul')::date END AS ranked_end_date
             FROM statistic_game_sessions s
             JOIN progression_matches p ON p.session_id=s.session_id AND p.user_id=:uid
             JOIN player_progression u ON u.user_id=p.user_id AND s.started_at>=u.created_at
@@ -188,10 +193,31 @@ class ProgressionRepository(private val db: DatabaseClient) {
             WHERE (s.left_user_id=:uid OR s.right_user_id=:uid) AND s.game_type IN ('PVP','Practice')
               AND s.started_at>=p.created_at-interval '10 seconds'
               AND s.status IN ('COMPLETED','DRAW','ABANDONED') AND r.user_id IS NULL
-              AND (g.id IS NOT NULL OR s.status='ABANDONED') ORDER BY s.id""", "uid" to userId)
+              AND (g.id IS NOT NULL OR s.status='ABANDONED') ORDER BY s.ended_at,s.id""", "uid" to userId)
             .map { r, _ -> ProgressionMatch(r.long("id"), r.get("win_user_id", Number::class.java)?.toLong(),
                 r.get("loss_user_id", Number::class.java)?.toLong(), r.get("status", String::class.java)!!,
-                r.get("end_reason", String::class.java)) }.all().asFlow().toList()
+                r.get("end_reason", String::class.java), r.get("ranked_end_date", LocalDate::class.java)) }.all().asFlow().toList()
+
+    suspend fun hasRankedWinXp(userId: Long, date: LocalDate): Boolean =
+        query("""SELECT EXISTS (
+            SELECT 1 FROM progression_match_rewards r
+            JOIN statistic_game_sessions s ON s.id=r.session_record_id
+            WHERE r.user_id=:uid AND r.xp>=:winXp AND s.game_type='PVP'
+              AND (s.ended_at AT TIME ZONE 'Asia/Seoul')::date=:day
+            )""", "uid" to userId, "winXp" to ProgressionPolicy.WIN_XP, "day" to date)
+            .map { r, _ -> r.get(0, Boolean::class.javaObjectType) == true }.one().awaitSingle()
+
+    suspend fun matchXp(userId: Long, sessionId: String): ProgressionMatchXp? =
+        query("""SELECT r.xp FROM progression_match_rewards r
+            JOIN statistic_game_sessions s ON s.id=r.session_record_id
+            WHERE r.user_id=:uid AND s.session_id=:sid ORDER BY s.id DESC LIMIT 1""",
+            "uid" to userId, "sid" to sessionId)
+            .map { r, _ ->
+                val total = r.long("xp").toInt()
+                // 기본 경기 XP의 최댓값은 승리 XP다. 초과분은 첫 승 보너스다.
+                val bonus = (total - ProgressionPolicy.WIN_XP).coerceAtLeast(0)
+                ProgressionMatchXp(total - bonus, bonus)
+            }.one().awaitSingleOrNull()
 
     suspend fun recordXp(userId: Long, sessionId: Long, xp: Int): Boolean =
         query("""INSERT INTO progression_match_rewards(user_id,session_record_id,xp) VALUES (:uid,:sid,:xp)

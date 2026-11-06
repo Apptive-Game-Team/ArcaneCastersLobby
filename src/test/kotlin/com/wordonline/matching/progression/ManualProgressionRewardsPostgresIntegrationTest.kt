@@ -45,7 +45,7 @@ class ManualProgressionRewardsPostgresIntegrationTest {
     private suspend fun number(sql: String): Long = db.sql(sql).map { r, _ -> r.get(0, Number::class.java)!!.toLong() }.one().awaitSingle()
     private suspend fun levelFive(): PendingProgressionReward {
         service.choose(user, "HELL", true)
-        exec("UPDATE player_progression SET xp=400 WHERE user_id=$user")
+        exec("UPDATE player_progression SET xp=${ProgressionPolicy.threshold(5)} WHERE user_id=$user")
         return service.pendingRewards(user, true).rewards.single { it.level == 5 }
     }
     private suspend fun magicCount(): Long = number("SELECT COALESCE(SUM(count),0) FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='rock_mage')")
@@ -154,13 +154,13 @@ class ManualProgressionRewardsPostgresIntegrationTest {
     @Test
     fun `기존 자동 지급 기준선 이하 레벨과 이미 소유한 source는 새 pending으로 만들지 않는다`(): Unit = runBlocking {
         service.choose(user, "HELL")
-        exec("UPDATE player_progression SET xp=400 WHERE user_id=$user")
+        exec("UPDATE player_progression SET xp=${ProgressionPolicy.threshold(5)} WHERE user_id=$user")
         service.sync(user)
         assertThat(service.pendingRewards(user, true).baselineLevel).isEqualTo(5)
         assertThat(service.pendingRewards(user, true).rewards).isEmpty()
         assertThat(number("SELECT SUM(count) FROM user_magics WHERE user_id=$user")).isEqualTo(17)
         repository.issueChest(user, "level:6", 3)
-        exec("UPDATE player_progression SET xp=500 WHERE user_id=$user")
+        exec("UPDATE player_progression SET xp=${ProgressionPolicy.threshold(6)} WHERE user_id=$user")
         val pending = service.pendingRewards(user, true)
         assertThat(pending.rewards).isEmpty()
         assertThat(pending.claimedLevels).contains(6)

@@ -57,8 +57,8 @@ class ProgressionPostgresIntegrationTest {
                 VALUES ('$sid',$user,0,'$type','localhost',1,'test','test','COMPLETED',$gameId,now())""")
         }
         val results = listOf(async { service.sync(user) }, async { service.sync(user) }).awaitAll()
-        assertThat(results.sumOf { it.gainedXp }).isEqualTo(200)
-        assertThat(service.sync(user).xp).isEqualTo(200)
+        assertThat(results.sumOf { it.gainedXp }).isEqualTo(225)
+        assertThat(service.sync(user).xp).isEqualTo(225)
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user")).isEqualTo(2)
     }
 
@@ -94,8 +94,32 @@ class ProgressionPostgresIntegrationTest {
         assertThat(number("SELECT COUNT(*) FROM progression_matches WHERE user_id=$user")).isEqualTo(10)
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user")).isEqualTo(10)
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(4)
-        assertThat(number("SELECT COUNT(*) FROM user_chests WHERE user_id=$user AND reward_source LIKE 'level:%'")).isEqualTo(4)
+        assertThat(number("SELECT COUNT(*) FROM user_chests WHERE user_id=$user AND reward_source LIKE 'level:%'")).isEqualTo(5)
         assertThat(number("SELECT count FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='rock_mage')")).isEqualTo(2)
+    }
+
+    @Test
+    fun `한국 시간 자정마다 첫 매칭 승리만 보너스를 주고 재조회에서도 같은 내역을 반환한다`(): Unit = runBlocking {
+        service.choose(user, "HELL")
+        val wins = listOf("2026-11-05 15:00:01+00", "2026-11-05 14:59:59+00", "2026-11-05 15:01:00+00")
+        for ((index, endedAt) in wins.withIndex()) {
+            val sid = "$user-win-$index"
+            repository.registerMatch(sid, user)
+            val gameId = number("""INSERT INTO statistic_games(win_user_id,loss_user_id,duration,game_type,server_version,event_schema_version)
+                VALUES ($user,0,180,'PVP','test',1) RETURNING id""")
+            exec("""INSERT INTO statistic_game_sessions(session_id,left_user_id,right_user_id,game_type,server_domain,server_port,
+                server_instance_id,server_version,status,statistic_game_id,ended_at)
+                VALUES ('$sid',$user,0,'PVP','localhost',1,'test','test','COMPLETED',$gameId,'$endedAt')""")
+        }
+        val results = listOf(
+            async { service.syncMatch(user, true, "$user-win-0") },
+            async { service.syncMatch(user, true, "$user-win-0") },
+        ).awaitAll()
+        assertThat(results.sumOf { it.gainedXp }).isEqualTo(350)
+        assertThat(results.map { it.matchXp }).containsOnly(ProgressionMatchXp(100, 25))
+        assertThat(service.syncMatch(user, true, "$user-win-1").matchXp).isEqualTo(ProgressionMatchXp(100, 25))
+        assertThat(service.syncMatch(user, true, "$user-win-2").matchXp).isEqualTo(ProgressionMatchXp(100, 0))
+        assertThat(service.syncMatch(user, true, "$user-unknown").matchXp).isNull()
     }
 
     @Test

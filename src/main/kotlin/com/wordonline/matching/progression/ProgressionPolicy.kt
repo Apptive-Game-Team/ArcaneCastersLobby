@@ -17,10 +17,13 @@ data class ProgressionProperties(
 
 object ProgressionPolicy {
     const val MAX_LEVEL = 50
+    const val WIN_XP = 100
+    const val FIRST_WIN_XP = 25
+
     fun cost(level: Int): Int = when {
-        level < 10 -> 100
-        level < 30 -> 250
-        level < MAX_LEVEL -> 330
+        level in 1..9 -> 60 + (level - 1) * 10
+        // 39개 간격으로 150~430을 보간해 가장 가까운 정수로 반올림한다.
+        level in 10 until MAX_LEVEL -> 150 + ((level - 10) * 280 + 19) / 39
         else -> 0
     }
     fun threshold(level: Int): Long = (1 until level).sumOf { cost(it).toLong() }
@@ -32,7 +35,7 @@ object ProgressionPolicy {
     }
     fun xp(userId: Long, winner: Long?, loser: Long?, status: String, reason: String?): Int = when {
         status == "ABANDONED" -> 0
-        winner == userId -> 100
+        winner == userId -> WIN_XP
         loser == userId && reason in setOf("SURRENDER", "DISCONNECT", "FORFEIT") -> 0
         loser == userId -> 25
         status == "DRAW" -> 50
@@ -46,4 +49,7 @@ data class ProgressionResponse(
     val faction: String?, val level: Int, val xp: Long,
     val levelXp: Long, val nextLevelXp: Int, val currency: Long,
     val gainedXp: Long = 0, val grantedChests: Int = 0,
+    val matchXp: ProgressionMatchXp? = null,
 )
+
+data class ProgressionMatchXp(val baseXp: Int, val firstWinBonusXp: Int)

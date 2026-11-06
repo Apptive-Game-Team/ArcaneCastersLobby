@@ -14,8 +14,15 @@ class ProgressionController(private val service: ProgressionService, private val
         service.rewards(userId!!)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.status(409).build()
 
     @PostMapping("/sync")
-    suspend fun sync(@UserId userId: Long?, @RequestHeader("X-Reward-Claims", required = false) capability: String? = null): ProgressionResponse =
-        service.sync(userId!!, claimPolicy.manual(capability))
+    suspend fun sync(
+        @UserId userId: Long?,
+        @RequestHeader("X-Reward-Claims", required = false) capability: String? = null,
+        @RequestParam(required = false) sessionId: String? = null,
+    ): ProgressionResponse {
+        val manualClaims = claimPolicy.manual(capability)
+        return if (sessionId.isNullOrBlank()) service.sync(userId!!, manualClaims)
+        else service.syncMatch(userId!!, manualClaims, sessionId)
+    }
 
     @GetMapping("/rewards/pending")
     suspend fun pending(@UserId userId: Long?, @RequestHeader("X-Reward-Claims", required = false) capability: String? = null): PendingProgressionRewardsResponse =

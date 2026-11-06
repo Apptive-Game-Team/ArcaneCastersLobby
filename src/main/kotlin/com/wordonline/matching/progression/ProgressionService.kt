@@ -28,6 +28,12 @@ class ProgressionService(
         syncLocked(userId, repository.lock(userId), manualClaims)
     }
 
+    suspend fun syncMatch(userId: Long, manualClaims: Boolean, sessionId: String): ProgressionResponse =
+        transaction.executeAndAwait {
+            val state = syncLocked(userId, repository.lock(userId), manualClaims)
+            state.copy(matchXp = repository.matchXp(userId, sessionId))
+        }
+
     suspend fun choose(userId: Long, faction: String, manualClaims: Boolean = false): ProgressionResponse? = transaction.executeAndAwait {
         val state = repository.lock(userId)
         if (state.faction != null && state.faction != faction) return@executeAndAwait null
@@ -93,7 +99,14 @@ class ProgressionService(
         var chests = 0
         if (state.faction != null) {
             repository.pendingMatches(userId).forEach { match ->
-                val xp = ProgressionPolicy.xp(userId, match.winner, match.loser, match.status, match.reason)
+                val baseXp = ProgressionPolicy.xp(userId, match.winner, match.loser, match.status, match.reason)
+                val date = match.rankedEndDate
+                val bonus = if (baseXp == ProgressionPolicy.WIN_XP && date != null && !repository.hasRankedWinXp(userId, date)) {
+                    ProgressionPolicy.FIRST_WIN_XP
+                } else {
+                    0
+                }
+                val xp = baseXp + bonus
                 if (repository.recordXp(userId, match.id, xp)) gained += xp
             }
             val level = ProgressionPolicy.level(state.xp + gained)
