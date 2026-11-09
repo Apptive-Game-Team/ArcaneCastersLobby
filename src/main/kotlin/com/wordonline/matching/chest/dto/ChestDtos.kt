@@ -24,6 +24,7 @@ data class UnopenedChestResponseDto(
     val chestKey: String,
     val acquiredAt: Instant,
     val rewards: List<ChestRewardDto>,
+    val rewardSlots: Int = 0,
 )
 
 /** Response of `POST /api/users/mine/chests/{id}/open`: one entry per reward granted. */

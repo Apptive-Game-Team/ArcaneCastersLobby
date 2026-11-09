@@ -6,6 +6,7 @@ import com.wordonline.matching.deck.service.DeckService
 import com.wordonline.matching.matching.config.MatchTicketProperties
 import com.wordonline.matching.matching.domain.MatchTicket
 import com.wordonline.matching.matching.domain.MatchTicketState
+import com.wordonline.matching.matching.dto.MatchDeckMode
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.SessionDto
 import com.wordonline.matching.matching.dto.SessionType
@@ -14,6 +15,7 @@ import com.wordonline.matching.matching.repository.MatchingQueueRepository
 import com.wordonline.matching.server.service.GameServerManagementService
 import com.wordonline.matching.session.domain.SessionPlacement
 import com.wordonline.matching.session.service.LegacyGameMatchService
+import com.wordonline.matching.progression.ProgressionRepository
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -24,6 +26,8 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.verifyNoInteractions
 import reactor.core.publisher.Mono
 import java.time.Instant
 
@@ -35,17 +39,22 @@ class GameMatchServiceBotFallbackTest {
     private val matchingQueueRepository: MatchingQueueRepository = mock()
     private val matchTicketRepository: MatchTicketRepository = mock()
 
+    private val decks: DeckService = mock()
+    private val random: RandomDeckService = mock()
+    private val progression: ProgressionRepository = mock()
+    private val opponents: PracticeOpponentSelector = mock()
     private val service = GameMatchService(
-        mock<PracticeOpponentSelector>(),
+        opponents,
         botMemberMaker,
         legacyGameMatchService,
         userService,
-        mock<DeckService>(),
-        mock<RandomDeckService>(),
+        decks,
+        random,
         matchingQueueRepository,
         matchTicketRepository,
         MatchTicketProperties(),
         mock<GameServerManagementService>(),
+        progression,
     )
 
     private fun ticket(userId: Long, waitedSeconds: Long, mmr: Long = 1000L): MatchTicket {
@@ -87,6 +96,78 @@ class GameMatchServiceBotFallbackTest {
                 "boot-1",
             ),
         )
+    }
+
+    @Test
+    fun `빈 선택 덱은 세션 번호를 발급하지 않는다`() = runTest {
+        whenever(decks.validSelectedDeckCards(1L)).thenReturn(Mono.empty())
+        assertThat(service.matchSelectedPractice(1L, -7L, null, MatchDeckMode.SELECTED)).isNull()
+        verify(matchingQueueRepository, never()).nextSessionId()
+        verifyNoInteractions(progression)
+    }
+
+    @Test
+    fun `랜덤 덱 카드를 연습 세션으로 전달한다`() = runTest {
+        stubRound(emptyList())
+        val cards = (1L..15L).toList()
+        whenever(random.create(1L)).thenReturn(cards)
+        service.matchSelectedPractice(1L, -7L, null, MatchDeckMode.RANDOM)
+        val session = argumentCaptor<SessionDto>()
+        verify(legacyGameMatchService).createSession(session.capture(), any(), any())
+        assertThat(session.firstValue.sessionType).isEqualTo(SessionType.Practice)
+        assertThat(session.firstValue.leftDeckCardIds).isEqualTo(cards)
+        assertThat(session.firstValue.rightDeckCardIds).isNull()
+        verify(progression).registerMatch(eq("bot-42"), eq(1L), any())
+    }
+
+    @Test
+    fun `자동 상대 연습은 세션 생성 후 사용자만 성장 경기에 등록한다`() = runTest {
+        stubRound(emptyList())
+        whenever(opponents.select(1L)).thenReturn(PracticeOpponent(-7L, false))
+
+        service.matchPractice(1L)
+
+        val order = inOrder(legacyGameMatchService, progression)
+        order.verify(legacyGameMatchService).createSession(any(), any(), any())
+        order.verify(progression).registerMatch(eq("bot-42"), eq(1L), any())
+        order.verifyNoMoreInteractions()
+    }
+
+    @Test
+    fun `선택 덱 연습도 성장 경기에 등록한다`() = runTest {
+        stubRound(emptyList())
+        whenever(decks.validSelectedDeckCards(1L)).thenReturn(Mono.just((1L..15L).toList()))
+
+        service.matchSelectedPractice(1L, -7L, null, MatchDeckMode.SELECTED)
+
+        verify(progression).registerMatch(eq("bot-42"), eq(1L), any())
+    }
+
+    @Test
+    fun `연습 세션 생성 실패는 성장 경기에 등록하지 않는다`() = runTest {
+        stubRound(emptyList())
+        whenever(random.create(1L)).thenReturn((1L..15L).toList())
+        whenever(legacyGameMatchService.createSession(any(), any(), any()))
+            .thenThrow(IllegalStateException("session unavailable"))
+
+        var failure: Throwable? = null
+        try {
+            service.matchSelectedPractice(1L, -7L, null, MatchDeckMode.RANDOM)
+        } catch (e: IllegalStateException) {
+            failure = e
+        }
+        assertThat(failure).isInstanceOf(IllegalStateException::class.java)
+        verifyNoInteractions(progression)
+    }
+
+    @Test
+    fun `관리자 봇 대전과 PvE는 성장 경기에 등록하지 않는다`() = runTest {
+        stubRound(emptyList())
+
+        service.matchBots(-7L, -8L)
+        service.matchPVE(1L, 1L)
+
+        verifyNoInteractions(progression)
     }
 
     @Test

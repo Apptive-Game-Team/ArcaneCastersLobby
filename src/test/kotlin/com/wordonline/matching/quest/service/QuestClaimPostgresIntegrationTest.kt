@@ -1,6 +1,9 @@
 package com.wordonline.matching.quest.service
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.wordonline.matching.progression.ProgressionRepository
+import com.wordonline.matching.progression.ProgressionProperties
+import com.wordonline.matching.progression.ProgressionService
 import com.wordonline.matching.appearance.repository.AppearanceRepository
 import com.wordonline.matching.chest.dto.ChestRewardDto
 import com.wordonline.matching.chest.repository.ChestRepository
@@ -11,6 +14,8 @@ import com.wordonline.matching.decoration.repository.UserDecorationRepository
 import com.wordonline.matching.quest.condition.AdventureClearCondition
 import com.wordonline.matching.quest.condition.StageClearCondition
 import com.wordonline.matching.quest.condition.TotalWinCondition
+import com.wordonline.matching.quest.condition.QuestCondition
+import com.wordonline.matching.quest.entity.Quest
 import com.wordonline.matching.quest.controller.QuestClaimController
 import com.wordonline.matching.quest.domain.QuestState
 import com.wordonline.matching.quest.dto.QuestClaimResponseDto
@@ -187,6 +192,60 @@ class QuestClaimPostgresIntegrationTest {
 
     private fun controller(service: QuestService = questService()) = QuestClaimController(service)
 
+    private suspend fun withAutoChestQuest(block: suspend (Long, QuestService) -> Unit) {
+        val questId = queryLong("""INSERT INTO quests(id,require_value,access_type,condition_type,claim_mode)
+            SELECT COALESCE(MAX(id),0)+1,1,'DEFAULT','IT_MANUAL_CLAIM','AUTO' FROM quests RETURNING id""")!!
+        try {
+            exec("INSERT INTO quest_rewards(quest_id,reward_type,target_id,amount) VALUES ($questId,'CHEST',${chestId("forest_chest")},1)")
+            val condition = object : QuestCondition {
+                override val type = "IT_MANUAL_CLAIM"
+                override suspend fun progress(userId: Long, quest: Quest): Int = 1
+            }
+            val service = QuestService(questRepository, questRewardRepository, userQuestRepository,
+                QuestRegistry(listOf(condition), grantors()), transactionalOperator)
+            block(questId, service)
+        } finally {
+            exec("DELETE FROM user_quests WHERE quest_id=$questId")
+            exec("DELETE FROM quest_rewards WHERE quest_id=$questId")
+            exec("DELETE FROM quests WHERE id=$questId")
+        }
+    }
+
+    @Test
+    fun `수동 check는 AUTO 상자 퀘스트를 보류하고 동시 claim은 한 번만 지급한다`(): Unit = runBlocking {
+        withAutoChestQuest { questId, service ->
+            assertThat(service.checkQuestsWithRewards(userId, manualClaims = true)).isEmpty()
+            assertThat(userChestCount()).isZero()
+            assertThat(userQuestState(questId)).isEqualTo("IN_PROGRESS")
+            val before = service.findMyQuests(userId, manualClaims = true).single { it.questId == questId }
+            assertThat(before.claimMode).isEqualTo("MANUAL")
+            assertThat(before.claimable).isTrue()
+
+            val outcomes = (1..6).map {
+                async { service.claimQuest(userId, questId, manualClaims = true) }
+            }.awaitAll()
+            assertThat(outcomes.count { it is QuestClaimResult.Claimed }).isEqualTo(1)
+            assertThat(outcomes.count { it == QuestClaimResult.AlreadyClaimed }).isEqualTo(5)
+            assertThat(userChestCount()).isEqualTo(1)
+            assertThat(service.findMyQuests(userId, manualClaims = true).single { it.questId == questId }.state)
+                .isEqualTo(QuestState.COMPLETED)
+            assertThat(controller(service).claimQuest(userId, questId).statusCode).isEqualTo(HttpStatus.CONFLICT)
+        }
+    }
+
+    @Test
+    fun `수동 check와 구버전 자동 check가 겹쳐도 같은 상자를 한번만 지급한다`(): Unit = runBlocking {
+        withAutoChestQuest { questId, service ->
+            val results = listOf(
+                async { service.checkQuestsWithRewards(userId, manualClaims = true) },
+                async { service.checkQuestsWithRewards(userId) },
+            ).awaitAll()
+            assertThat(results.flatten().count { it.questId == questId }).isEqualTo(1)
+            assertThat(userChestCount()).isEqualTo(1)
+            assertThat(service.claimQuest(userId, questId, manualClaims = true)).isEqualTo(QuestClaimResult.AlreadyClaimed)
+        }
+    }
+
     @Test
     @DisplayName("V024_는_ADVENTURE_CLEAR_퀘스트_11_12_를_MANUAL_로_하고_나머지는_AUTO_로_둔다")
     fun migrationSetsClaimModes() = runBlocking<Unit> {
@@ -301,7 +360,7 @@ class QuestClaimPostgresIntegrationTest {
         val questId = adventureQuestId("forest")
         val forestChestId = chestId("forest_chest")
         val service = questService()
-        val chestService = ChestService(chestRepository, registry(), transactionalOperator)
+        val chestService = ChestService(chestRepository, registry(), transactionalOperator, ProgressionRepository(databaseClient), ProgressionService(ProgressionRepository(databaseClient), ProgressionProperties(), transactionalOperator))
 
         val before = service.findMyQuests(userId).single { it.questId == questId }
         assertThat(before.claimMode).isEqualTo("MANUAL")

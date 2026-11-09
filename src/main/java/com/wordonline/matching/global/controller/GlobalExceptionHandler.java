@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ResponseStatusException;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -61,6 +62,12 @@ public class GlobalExceptionHandler {
     public Mono<ResponseEntity<String>> handleValidationException(MethodArgumentNotValidException e) {
         log.trace(e.getMessage());
         return Mono.just(ResponseEntity.badRequest().body(INVALID_REQUEST_MESSAGE));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public Mono<ResponseEntity<String>> handleResponseStatusException(ResponseStatusException e) {
+        return Mono.just(ResponseEntity.status(e.getStatusCode())
+                .headers(e.getHeaders()).body(e.getReason()));
     }
 
     @ExceptionHandler(Exception.class)

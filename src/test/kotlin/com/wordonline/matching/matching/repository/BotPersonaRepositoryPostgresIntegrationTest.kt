@@ -67,6 +67,18 @@ class BotPersonaRepositoryPostgresIntegrationTest {
     }
 
     @Test
+    fun `요청한 등급의 매칭 가능한 DB 행을 봇 객체로 읽는다`() = runBlocking<Unit> {
+        execute("INSERT INTO users(id, mmr) VALUES (-17, 400), (-18, 420), (-60, 1000)")
+        execute("""
+            INSERT INTO bot_personas(user_id, name, enabled) VALUES
+              (-17, 'Sky Hatchling', TRUE), (-18, 'Cloud Cadet', FALSE), (-60, 'Golem Architect', TRUE)
+        """)
+        val selected = botPersonaRepository.findMatchableByUserIds(listOf(-17, -18)).collectList().awaitSingle()
+        assertThat(selected.map { it.userId }).containsExactly(-17L)
+        assertThat(selected.single().name).isEqualTo("Sky Hatchling")
+    }
+
+    @Test
     @DisplayName("RULE 봇과 key 를 쓸 수 있는 LLM 봇만 고르고 비활성 봇과 hospitality 봇은 뺀다")
     fun matchableRule() = runBlocking<Unit> {
         execute(
@@ -130,6 +142,9 @@ class BotPersonaRepositoryPostgresIntegrationTest {
 
         assertThat(nearTwelveHundred.map { it.userId }).containsExactly(-2L, -4L)
         assertThat(nearThousand.map { it.userId }).containsExactly(-5L)
+        val withoutModels = botPersonaRepository.findNearestMatchable(1200, 1, listOf(-2, -4))
+            .collectList().awaitSingle()
+        assertThat(withoutModels.map { it.userId }).containsExactly(-5L)
     }
 
     companion object {

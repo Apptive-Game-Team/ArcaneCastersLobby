@@ -113,10 +113,27 @@ class LocalSessionServiceTest {
     }
 
     @Test
+    fun `일반 로컬 경기와 접대봇 대체 경로는 로컬 전용 상대만 선택한다`() = runBlocking<Unit> {
+        for (novice in listOf(false, true)) {
+            givenIssuable()
+            whenever(userService.isNovice(userId)).thenReturn(Mono.just(novice))
+            whenever(userService.getMmr(userId)).thenReturn(Mono.just(1000L))
+            whenever(botMemberMaker.getLocalHospitalityBotId()).thenReturn(Mono.error(IllegalStateException("unavailable")))
+            whenever(botMemberMaker.getLocalPracticeBotIdNear(1000L)).thenReturn(ordinaryBotId)
+            whenever(userService.getUserDetail(ordinaryBotId))
+                .thenReturn(Mono.just(UserDetailResponseDto(ordinaryBotId, "rule", "bot@example.com")))
+            val result = service().issue(userId, LocalSessionRequest(type = "PRACTICE"))
+            assertThat(result).isInstanceOf(LocalSessionIssueResult.Issued::class.java)
+            assertThat((result as LocalSessionIssueResult.Issued).response.rightUserId).isEqualTo(ordinaryBotId)
+        }
+        verifyBlocking(botMemberMaker, never()) { getPracticeBotIdNear(any()) }
+    }
+
+    @Test
     fun `초보자의 연습 세션은 접대봇과 붙고 그 사실이 Redis 기록에 남는다`() = runBlocking<Unit> {
         givenIssuable()
         whenever(userService.isNovice(userId)).thenReturn(Mono.just(true))
-        whenever(botMemberMaker.getHospitalityBotId()).thenReturn(Mono.just(hospitalityBotId))
+        whenever(botMemberMaker.getLocalHospitalityBotId()).thenReturn(Mono.just(hospitalityBotId))
 
         val result = service().issue(userId, LocalSessionRequest("PRACTICE"))
 

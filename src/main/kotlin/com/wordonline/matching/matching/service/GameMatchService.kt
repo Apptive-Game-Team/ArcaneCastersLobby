@@ -1,6 +1,7 @@
 package com.wordonline.matching.matching.service
 
 import com.wordonline.matching.auth.service.UserService
+import com.wordonline.matching.progression.ProgressionRepository
 import com.wordonline.matching.deck.service.DeckService
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.MatchDeckMode
@@ -28,6 +29,7 @@ import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.flow.Flow
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
 import java.time.Clock
@@ -46,6 +48,7 @@ class GameMatchService(
     private val matchTicketRepository: MatchTicketRepository,
     private val matchTicketProperties: MatchTicketProperties,
     private val gameServerManagementService: GameServerManagementService,
+    private val progressionRepository: ProgressionRepository,
 ) {
     private val clock = Clock.systemUTC()
     private val log = LoggerFactory.getLogger(javaClass)
@@ -55,10 +58,34 @@ class GameMatchService(
     private val scope = CoroutineScope(Dispatchers.Default + exceptionHandler)
 
     suspend fun matchPractice(userId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
-        val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
         val botId = practiceOpponentSelector.select(userId).botId
-        val sessionDto = SessionDto.Practice(sessionId, userId, botId)
-        return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
+        return createPracticeSession(userId, botId, pings, null)
+    }
+
+    suspend fun matchSelectedPractice(
+        userId: Long, botId: Long, pings: Map<Long, Long>?, deckMode: MatchDeckMode,
+    ): MatchedInfoDto? {
+        val cards = when (deckMode) {
+            MatchDeckMode.SELECTED -> deckService.validSelectedDeckCards(userId).awaitSingleOrNull() ?: return null
+            MatchDeckMode.RANDOM -> try {
+                randomDeckService.create(userId)
+            } catch (e: ResponseStatusException) {
+                if (e.statusCode == HttpStatus.UNPROCESSABLE_ENTITY) return null
+                throw e
+            }
+        }
+        return createPracticeSession(userId, botId, pings, cards)
+    }
+
+    private suspend fun createPracticeSession(
+        userId: Long, botId: Long, pings: Map<Long, Long>?, cards: List<Long>?,
+    ): MatchedInfoDto {
+        val matchRequestedAt = Instant.now(clock)
+        val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
+        val sessionDto = SessionDto.Practice(sessionId, userId, botId, cards)
+        val placement = legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings))
+        progressionRepository.registerMatch(sessionId, userId, matchRequestedAt = matchRequestedAt)
+        return placement.matchInfo
     }
 
     suspend fun matchBots(leftBotId: Long, rightBotId: Long): MatchedInfoDto {
@@ -195,6 +222,8 @@ class GameMatchService(
         )
 
         try {
+            progressionRepository.registerMatch(sessionId, uid1)
+            progressionRepository.registerMatch(sessionId, uid2)
             val placement = legacyGameMatchService.createSession(
                 sessionDto,
                 attemptId,
@@ -273,6 +302,7 @@ class GameMatchService(
             val sessionId = "session-${matchingQueueRepository.nextSessionId().awaitSingle()}"
             val sessionDto = SessionDto.PVP(sessionId, ticket.userId, botId, claiming.deckCardIds, null)
             try {
+                progressionRepository.registerMatch(sessionId, ticket.userId)
                 val placement = legacyGameMatchService.createSession(
                     sessionDto,
                     attemptId,

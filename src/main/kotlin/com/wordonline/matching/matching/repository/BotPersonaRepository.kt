@@ -25,6 +25,13 @@ bp.enabled = TRUE
 """
 
 interface BotPersonaRepository : R2dbcRepository<BotPersona, Long> {
+    @Query("""
+        SELECT bp.user_id, bp.name, bp.enabled, bp.hospitality
+        FROM bot_personas bp
+        WHERE $MATCHABLE_BOT_PERSONA_CONDITION AND bp.user_id IN (:ids)
+    """)
+    fun findMatchableByUserIds(ids: List<Long>): Flux<BotPersona>
+
     fun findByUserId(userId: Long): Mono<BotPersona>
 
     // Excludes the hospitality bot on purpose. It is enabled, so without this clause an ordinary
@@ -41,11 +48,12 @@ interface BotPersonaRepository : R2dbcRepository<BotPersona, Long> {
         FROM bot_personas bp
         LEFT JOIN users u ON u.id = bp.user_id
         WHERE $MATCHABLE_BOT_PERSONA_CONDITION
+          AND bp.user_id NOT IN (:excludedIds)
         ORDER BY ABS(COALESCE(u.mmr, 1000) - :mmr), RANDOM()
         LIMIT :limit
         """
     )
-    fun findNearestMatchable(mmr: Long, limit: Int): Flux<BotPersona>
+    fun findNearestMatchable(mmr: Long, limit: Int, excludedIds: List<Long> = listOf(0L)): Flux<BotPersona>
 
     @Query(
         """

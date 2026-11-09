@@ -27,21 +27,28 @@ class PracticeOpponentSelector(
     // built to lose. The fallback matters: the tutorial opponent being unavailable must not be the
     // reason a new player cannot start a match at all, so they get an ordinary bot and keep the
     // mark for next time. Everyone else meets a bot near their own MMR.
-    suspend fun select(userId: Long): PracticeOpponent {
+    suspend fun select(userId: Long): PracticeOpponent = select(userId, local = false)
+
+    suspend fun selectLocal(userId: Long): PracticeOpponent = select(userId, local = true)
+
+    private suspend fun select(userId: Long, local: Boolean): PracticeOpponent {
         if (!userService.isNovice(userId).awaitSingle()) {
-            return PracticeOpponent(botNearMmrOf(userId), hospitality = false)
+            return PracticeOpponent(botNearMmrOf(userId, local), hospitality = false)
         }
 
         return try {
-            PracticeOpponent(botMemberMaker.getHospitalityBotId().awaitSingle(), hospitality = true)
+            val botId = if (local) botMemberMaker.getLocalHospitalityBotId() else botMemberMaker.getHospitalityBotId()
+            PracticeOpponent(botId.awaitSingle(), hospitality = true)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             log.warn("No hospitality bot available for novice userId={}; falling back to the bot pool", userId, e)
-            PracticeOpponent(botNearMmrOf(userId), hospitality = false)
+            PracticeOpponent(botNearMmrOf(userId, local), hospitality = false)
         }
     }
 
-    private suspend fun botNearMmrOf(userId: Long): Long =
-        botMemberMaker.getPracticeBotIdNear(userService.getMmr(userId).awaitSingle())
+    private suspend fun botNearMmrOf(userId: Long, local: Boolean): Long {
+        val mmr = userService.getMmr(userId).awaitSingle()
+        return if (local) botMemberMaker.getLocalPracticeBotIdNear(mmr) else botMemberMaker.getPracticeBotIdNear(mmr)
+    }
 }
