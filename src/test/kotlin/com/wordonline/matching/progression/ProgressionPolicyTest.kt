@@ -8,8 +8,12 @@ class ProgressionPolicyTest {
     @Test
     fun `레벨 경계와 전체 상자 추첨 수량`() {
         assertThat(ProgressionPolicy.threshold(50)).isEqualTo(12500)
-        assertThat(ProgressionPolicy.level(99)).isEqualTo(1)
-        assertThat(ProgressionPolicy.level(100)).isEqualTo(2)
+        assertThat(ProgressionPolicy.level(59)).isEqualTo(1)
+        assertThat(ProgressionPolicy.level(60)).isEqualTo(2)
+        assertThat(ProgressionPolicy.cost(9)).isEqualTo(140)
+        assertThat(ProgressionPolicy.cost(10)).isEqualTo(150)
+        assertThat(ProgressionPolicy.cost(49)).isEqualTo(430)
+        assertThat((1..49).map(ProgressionPolicy::cost).zipWithNext().all { (a, b) -> a < b }).isTrue()
         assertThat(ProgressionPolicy.level(899)).isEqualTo(9)
         assertThat(ProgressionPolicy.level(900)).isEqualTo(10)
         assertThat(ProgressionPolicy.level(12499)).isEqualTo(49)
