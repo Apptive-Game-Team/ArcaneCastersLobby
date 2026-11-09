@@ -37,8 +37,8 @@ XP와 레벨, 세력 선택의 시작 카드와 덱은 즉시 반영한다. 이�
 
 - 새 계정에 전체 카드를 주던 초기화를 제거한다. 세력 선택 시 5종을 3장씩 주고 15장짜리 시작 덱을 만든다.
 - 기존 보유 카드와 선택 덱은 보존한다. 기존 계정도 레벨 1에서 시작하며 과거 경기는 소급하지 않는다.
-- `HELL`: fire_shot, ember_spirit_swarm, towerback, rock_golem, magma_explosion.
-- `NATURE`: chain_lightning, water_slime_swarm, vine_spirit, tree_golem, water_explosion.
+- `HELL`: fire_shot, rock_golem, rock_mage, wall_golem, stone_gargoyle.
+- `NATURE`: chain_lightning, electric_spearman, aqua_archer, tree_golem, thunder_spirit.
 - 매칭과 봇 연습 경기의 승리 100 XP, 패배 25 XP, 무승부 50 XP, 취소 0 XP. 상대 자동 선택과 난이도 선택 연습에 같은 규칙을 적용한다. 친선전·PvE·관리자 봇 대전은 제외한다.
 - 연습 세션 생성에 성공한 사용자만 성장 대상 경기로 등록한다. 등록 전 과거 연습 경기는 소급하지 않으며, 경험치와 레벨 보상은 기존 경기 원장과 사용자별 잠금으로 한 번만 지급한다.
 - 데스크톱 로컬 연습 결과는 클라이언트가 제출하므로 XP를 지급하지 않는다. 공유 게임 서버가 기록한 연습 세션만 반영한다.
@@ -49,19 +49,23 @@ XP와 레벨, 세력 선택의 시작 카드와 덱은 즉시 반영한다. 이�
 
 | 레벨 | HELL 고정 2장 | NATURE 고정 2장 |
 |---:|---|---|
-| 5 | rock_mage | wind_spirit |
+| 5 | ember_spirit_swarm | water_slime_swarm |
 | 10 | meteor_shower | tornado_strike |
-| 15 | mini_rock_swarm | life_tree |
-| 20 | magma_spirit | aqua_archer |
+| 15 | rock_golem | life_tree |
+| 20 | magma_spirit | vine_spirit |
 | 25 | frenzy_totem | grass_generator |
 | 30 | dragon_tower | tide_call |
 | 35 | earth_call | overgrowth |
-| 40 | wall_golem | storm_rider |
+| 40 | crater_carrier | storm_rider |
 | 45 | evil_ent | vine_world |
 | 50 | fire_lord_spirit | sea_serpent |
 
-위 표의 양쪽 마법은 같은 레벨에 상자 풀에 들어간다. 나머지 `purpose=PLAYER` 마법은 레벨 1부터 포함한다.
-최신 dev 카탈로그는 PLAYER 74종이며 초기 풀 54종, 전체 수집 기준 222장이다.
+위 지급표는 Database V125부터 적용한다. 같은 카드는 여러 레벨에 등록될 수 있으며
+상자 후보는 가장 이른 해금 레벨부터 마법별로 한 번만 포함한다. 예를 들어 rock_golem은
+시작 카드이면서 15레벨 보상이므로 레벨 1부터 추첨 가능하다. 보유 상한은 그대로 3장이다.
+지급표에 없는 `purpose=PLAYER` 마법은 레벨 1부터 포함한다.
+기존 계정의 보유 카드·덱과 이미 발급한 미수령 보상·영수증은 바꾸지 않는다.
+상자 후보의 중복 제거를 지원하는 lobby를 먼저 배포한 뒤 V125와 Client #398을 적용한다.
 
 ## 상자 추첨과 설정
 

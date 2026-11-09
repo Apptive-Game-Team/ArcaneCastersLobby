@@ -137,7 +137,7 @@ class ProgressionRepository(private val db: DatabaseClient) {
             .all().asFlow().toList()
 
     suspend fun eligibleMagics(userId: Long, level: Int): List<ProgressionMagic> =
-        query("""SELECT m.id,m.name FROM magics m
+        query("""SELECT DISTINCT m.id,m.name FROM magics m
             LEFT JOIN progression_magic_rewards r ON r.magic_id=m.id
             LEFT JOIN user_magics u ON u.magic_id=m.id AND u.user_id=:uid
             WHERE m.purpose='PLAYER' AND COALESCE(r.unlock_level,1)<=:level AND COALESCE(u.count,0)<3

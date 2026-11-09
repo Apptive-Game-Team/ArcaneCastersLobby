@@ -28,7 +28,7 @@ class ManualProgressionRewardsPostgresIntegrationTest {
 
     @BeforeAll
     fun setup(): Unit = runBlocking {
-        val factory = MigratedPostgresDatabase.build("manual_progression_rewards_it", 124)
+        val factory = MigratedPostgresDatabase.build("manual_progression_rewards_it", 125)
         db = DatabaseClient.create(factory)
         repository = ProgressionRepository(db)
         transaction = TransactionalOperator.create(R2dbcTransactionManager(factory))
@@ -48,7 +48,7 @@ class ManualProgressionRewardsPostgresIntegrationTest {
         exec("UPDATE player_progression SET xp=${ProgressionPolicy.threshold(5)} WHERE user_id=$user")
         return service.pendingRewards(user, true).rewards.single { it.level == 5 }
     }
-    private suspend fun magicCount(): Long = number("SELECT COALESCE(SUM(count),0) FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='rock_mage')")
+    private suspend fun magicCount(): Long = number("SELECT COALESCE(SUM(count),0) FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='ember_spirit_swarm')")
 
     @Test
     fun `수동 모드는 레벨과 시작 덱만 즉시 반영하고 레벨 보상과 오늘 상자를 보관한다`(): Unit = runBlocking {
@@ -86,7 +86,7 @@ class ManualProgressionRewardsPostgresIntegrationTest {
         for ((owned, delta) in listOf(0 to 2, 2 to 1, 3 to 0, 5 to 0)) {
             newUser()
             val reward = levelFive()
-            exec("INSERT INTO user_magics(user_id,magic_id,count) SELECT $user,id,$owned FROM magics WHERE name='rock_mage'")
+            exec("INSERT INTO user_magics(user_id,magic_id,count) SELECT $user,id,$owned FROM magics WHERE name='ember_spirit_swarm'")
             val result = service.claimReward(user, reward.id, true)!!
             assertThat(result.rewards.single { it.rewardType == "MAGIC" }.amount).isEqualTo(delta)
             assertThat(magicCount()).isEqualTo((owned + delta).toLong())

@@ -28,7 +28,7 @@ class ProgressionPostgresIntegrationTest {
 
     @BeforeAll
     fun setup(): Unit = runBlocking {
-        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 124)
+        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 125)
         db = DatabaseClient.create(factory)
         repository = ProgressionRepository(db)
         transaction = TransactionalOperator.create(R2dbcTransactionManager(factory))
@@ -95,7 +95,7 @@ class ProgressionPostgresIntegrationTest {
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user")).isEqualTo(10)
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(4)
         assertThat(number("SELECT COUNT(*) FROM user_chests WHERE user_id=$user AND reward_source LIKE 'level:%'")).isEqualTo(5)
-        assertThat(number("SELECT count FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='rock_mage')")).isEqualTo(2)
+        assertThat(number("SELECT count FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='ember_spirit_swarm')")).isEqualTo(2)
     }
 
     @Test
