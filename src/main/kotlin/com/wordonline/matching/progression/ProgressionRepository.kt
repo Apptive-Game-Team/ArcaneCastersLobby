@@ -39,6 +39,22 @@ class ProgressionRepository(private val db: DatabaseClient) {
         query("UPDATE player_progression SET faction=:faction WHERE user_id=:uid", "uid" to userId, "faction" to faction)
             .fetch().rowsUpdated().awaitSingle()
     }
+
+    suspend fun grantStarterAppearance(userId: Long, key: String) {
+        query("""
+            WITH starter AS (
+                SELECT id, key FROM appearances WHERE key = :key
+            ), granted AS (
+                INSERT INTO user_appearances (user_id, appearance_id)
+                SELECT :uid, id FROM starter
+                ON CONFLICT (user_id, appearance_id) DO NOTHING
+            )
+            UPDATE users u SET appearance = starter.key
+            FROM starter
+            WHERE u.id = :uid AND (u.appearance IS NULL OR u.appearance = 'default')
+        """.trimIndent(), "uid" to userId, "key" to key).fetch().rowsUpdated().awaitSingle()
+    }
+
     suspend fun save(userId: Long, xp: Long, level: Int) {
         query("UPDATE player_progression SET xp=:xp, level=:level WHERE user_id=:uid", "uid" to userId, "xp" to xp, "level" to level)
             .fetch().rowsUpdated().awaitSingle()

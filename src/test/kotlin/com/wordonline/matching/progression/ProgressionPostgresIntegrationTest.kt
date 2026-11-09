@@ -28,7 +28,7 @@ class ProgressionPostgresIntegrationTest {
 
     @BeforeAll
     fun setup(): Unit = runBlocking {
-        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 125)
+        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 126)
         db = DatabaseClient.create(factory)
         repository = ProgressionRepository(db)
         transaction = TransactionalOperator.create(R2dbcTransactionManager(factory))
@@ -42,6 +42,30 @@ class ProgressionPostgresIntegrationTest {
     private suspend fun exec(sql: String) { db.sql(sql).fetch().rowsUpdated().awaitSingle() }
     private suspend fun number(sql: String): Long = db.sql(sql).map { r, _ -> r.get(0, Number::class.java)!!.toLong() }.one().awaitSingle()
     private fun chests() = ChestService(ChestRepository(db), QuestRegistry(emptyList(), emptyList()), transaction, repository, service)
+
+    @Test
+    fun `불차원 외형을 한 번 지급하고 재선택 시 장착 외형을 보존한다`(): Unit = runBlocking {
+        val alreadyCustomized = user + 100000
+        val nature = user + 200000
+        exec("INSERT INTO users(id, appearance) VALUES ($alreadyCustomized, 'blaze'), ($nature, 'default')")
+
+        listOf(async { service.choose(user, "HELL") }, async { service.choose(user, "HELL") }).awaitAll()
+        service.choose(alreadyCustomized, "HELL")
+        service.choose(nature, "NATURE")
+
+        assertThat(number("""
+            SELECT count(*) FROM user_appearances ua JOIN appearances a ON a.id = ua.appearance_id
+            WHERE a.key = 'corrupted_finn' AND ua.user_id IN ($user, $alreadyCustomized)
+        """)).isEqualTo(2)
+        assertThat(number("SELECT count(*) FROM user_appearances WHERE user_id = $nature")).isZero()
+        assertThat(number("SELECT count(*) FROM users WHERE id = $user AND appearance = 'corrupted_finn'")).isEqualTo(1)
+        assertThat(number("SELECT count(*) FROM users WHERE id = $alreadyCustomized AND appearance = 'blaze'")).isEqualTo(1)
+        assertThat(number("SELECT count(*) FROM users WHERE id = $nature AND appearance = 'default'")).isEqualTo(1)
+
+        exec("UPDATE users SET appearance = 'default' WHERE id = $user")
+        service.choose(user, "HELL")
+        assertThat(number("SELECT count(*) FROM users WHERE id = $user AND appearance = 'default'")).isEqualTo(1)
+    }
 
     @Test
     fun `등록된 매칭과 연습만 반영하고 친선전과 PvE와 관리자 대전은 제외한다`(): Unit = runBlocking {

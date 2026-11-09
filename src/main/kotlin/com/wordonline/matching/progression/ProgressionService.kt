@@ -43,6 +43,7 @@ class ProgressionService(
             repository.choose(userId, faction)
             magics.forEach { repository.grantMagic(userId, it.id, 3) }
             repository.createStarterDeck(userId, faction)
+            if (faction == "HELL") repository.grantStarterAppearance(userId, "corrupted_finn")
         }
         syncLocked(userId, state.copy(faction = faction), manualClaims)
     }
