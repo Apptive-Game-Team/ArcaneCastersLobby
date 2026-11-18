@@ -123,6 +123,37 @@ class ProgressionPostgresIntegrationTest {
     }
 
     @Test
+    fun `오류와 이탈 경기의 기록된 플레이 시간으로 XP와 첫 승 보너스를 제한한다`(): Unit = runBlocking {
+        service.choose(user, "HELL")
+        for (reason in listOf("LOOP_FAILURE", "DISCONNECT")) {
+            for (seconds in listOf(29, 30)) {
+                val suffix = "$reason-$seconds"
+                practiceResult(suffix, "DRAW", null, null, reason)
+                exec("""UPDATE statistic_games SET duration=$seconds WHERE id=(
+                    SELECT statistic_game_id FROM statistic_game_sessions WHERE session_id='$user-$suffix')""")
+            }
+        }
+        practiceResult("normal-short", "DRAW", null, null)
+        exec("""UPDATE statistic_games SET duration=1 WHERE id=(
+            SELECT statistic_game_id FROM statistic_game_sessions WHERE session_id='$user-normal-short')""")
+        assertThat(service.sync(user).gainedXp).isEqualTo(150)
+        assertThat(service.sync(user).gainedXp).isZero()
+        assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(2)
+
+        for (seconds in listOf(29, 30)) {
+            val sid = "$user-interrupted-win-$seconds"
+            repository.registerMatch(sid, user)
+            val gameId = number("""INSERT INTO statistic_games(win_user_id,loss_user_id,duration,game_type,server_version,event_schema_version)
+                VALUES ($user,-7,$seconds,'PVP','test',1) RETURNING id""")
+            exec("""INSERT INTO statistic_game_sessions(session_id,left_user_id,right_user_id,game_type,server_domain,server_port,
+                server_instance_id,server_version,status,end_reason,statistic_game_id,ended_at)
+                VALUES ('$sid',$user,-7,'PVP','localhost',1,'test','test','COMPLETED','DISCONNECT',$gameId,now())""")
+            val result = service.syncMatch(user, true, sid)
+            assertThat(result.matchXp).isEqualTo(if (seconds == 29) ProgressionMatchXp(0, 0) else ProgressionMatchXp(100, 25))
+        }
+    }
+
+    @Test
     fun `한국 시간 자정마다 첫 매칭 승리만 보너스를 주고 재조회에서도 같은 내역을 반환한다`(): Unit = runBlocking {
         service.choose(user, "HELL")
         val wins = listOf("2026-11-05 15:00:01+00", "2026-11-05 14:59:59+00", "2026-11-05 15:01:00+00")
@@ -193,7 +224,7 @@ class ProgressionPostgresIntegrationTest {
         }
         assertThat(service.sync(user).xp).isZero()
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(2)
-        assertThat(ProgressionPolicy.xp(0, 0, user, "COMPLETED", "SURRENDER")).isEqualTo(100)
+        assertThat(ProgressionPolicy.xp(0, 0, user, "COMPLETED", "SURRENDER", 180)).isEqualTo(100)
     }
 
     @Test

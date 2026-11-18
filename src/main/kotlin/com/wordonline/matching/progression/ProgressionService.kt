@@ -100,7 +100,7 @@ class ProgressionService(
         var chests = 0
         if (state.faction != null) {
             repository.pendingMatches(userId).forEach { match ->
-                val baseXp = ProgressionPolicy.xp(userId, match.winner, match.loser, match.status, match.reason)
+                val baseXp = ProgressionPolicy.xp(userId, match.winner, match.loser, match.status, match.reason, match.durationSeconds)
                 val date = match.rankedEndDate
                 val bonus = if (baseXp == ProgressionPolicy.WIN_XP && date != null && !repository.hasRankedWinXp(userId, date)) {
                     ProgressionPolicy.FIRST_WIN_XP
