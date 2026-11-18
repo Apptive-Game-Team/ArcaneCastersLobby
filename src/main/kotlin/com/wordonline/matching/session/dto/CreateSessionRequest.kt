@@ -1,5 +1,6 @@
 package com.wordonline.matching.session.dto
 
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.wordonline.matching.matching.dto.SessionDto
 import com.wordonline.matching.matching.dto.SessionType
 
@@ -12,6 +13,8 @@ data class CreateSessionRequest(
     val scenarioId: Long?,
     val leftDeckCardIds: List<Long>?,
     val rightDeckCardIds: List<Long>?,
+    @get:JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    val startProtocolVersion: Int = 0,
 ) {
     constructor(attemptId: String, session: SessionDto) : this(
         attemptId,
@@ -22,6 +25,7 @@ data class CreateSessionRequest(
         session.scenarioId,
         session.leftDeckCardIds,
         session.rightDeckCardIds,
+        session.startProtocolVersion,
     )
 }
 
@@ -42,4 +46,5 @@ data class SessionReadyResponse(
      * not an enum, so a kind added later passes through. `null` when the game server predates it.
      */
     val mapType: String? = null,
+    val startProtocolVersion: Int = 0,
 )

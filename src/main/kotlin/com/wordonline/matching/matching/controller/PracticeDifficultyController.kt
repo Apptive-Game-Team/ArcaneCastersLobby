@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -32,11 +33,13 @@ class PracticeDifficultyController(
         @PathVariable id: String,
         @RequestParam(required = false) pings: String?,
         @RequestParam(defaultValue = "SELECTED") deckMode: String,
+        @RequestHeader(name = "X-Game-Start-Protocol", defaultValue = "0") startProtocolVersion: Int = 0,
+
     ): ResponseEntity<MatchedInfoDto> {
         val tier = PracticeDifficulty.entries.find { it.name == id } ?: return ResponseEntity.badRequest().build()
         val mode = MatchDeckMode.entries.find { it.name == deckMode } ?: return ResponseEntity.badRequest().build()
         val bot = difficulties.select(tier) ?: return ResponseEntity.status(HttpStatus.CONFLICT).build()
-        val match = matches.matchSelectedPractice(userId!!, bot, GameServerPingSelector.parse(pings), mode)
+        val match = matches.matchSelectedPractice(userId!!, bot, GameServerPingSelector.parse(pings), mode, startProtocolVersion)
             ?: return ResponseEntity.unprocessableEntity().build()
         return ResponseEntity.ok(match)
     }

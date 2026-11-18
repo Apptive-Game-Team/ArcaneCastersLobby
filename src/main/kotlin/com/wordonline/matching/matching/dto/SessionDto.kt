@@ -8,6 +8,7 @@ data class SessionDto(
     val scenarioId: Long?,
     val leftDeckCardIds: List<Long>? = null,
     val rightDeckCardIds: List<Long>? = null,
+    val startProtocolVersion: Int = 0,
 ) {
     companion object {
         fun PVP(
