@@ -24,12 +24,38 @@ class ProgressionPolicyTest {
 
     @Test
     fun `승리 일반 패배 무승부 취소와 항복 경험치`() {
-        assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", null)).isEqualTo(100)
-        assertThat(ProgressionPolicy.xp(1, 2, 1, "COMPLETED", null)).isEqualTo(25)
-        assertThat(ProgressionPolicy.xp(1, null, null, "DRAW", null)).isEqualTo(50)
-        assertThat(ProgressionPolicy.xp(1, null, null, "ABANDONED", null)).isZero()
-        assertThat(ProgressionPolicy.xp(1, 2, 1, "COMPLETED", "SURRENDER")).isZero()
-        assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", "SURRENDER")).isEqualTo(100)
+        assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", null, 180)).isEqualTo(100)
+        assertThat(ProgressionPolicy.xp(1, 2, 1, "COMPLETED", null, 180)).isEqualTo(25)
+        assertThat(ProgressionPolicy.xp(1, null, null, "DRAW", null, 180)).isEqualTo(50)
+        assertThat(ProgressionPolicy.xp(1, null, null, "ABANDONED", null, 180)).isZero()
+        assertThat(ProgressionPolicy.xp(1, 2, 1, "COMPLETED", "SURRENDER", 180)).isZero()
+        assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", "SURRENDER", 180)).isEqualTo(100)
+    }
+
+    @Test
+    fun `오류와 연결 끊김 종료는 30초부터 기존 XP 정책을 적용한다`() {
+        for (reason in listOf("LOOP_FAILURE", "DISCONNECT")) {
+            for (seconds in listOf<Long?>(null, -1, 0, 29)) {
+                assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", reason, seconds)).isZero()
+                assertThat(ProgressionPolicy.xp(1, null, null, "DRAW", reason, seconds)).isZero()
+            }
+            for (seconds in listOf(30L, 31L)) {
+                assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", reason, seconds)).isEqualTo(100)
+                assertThat(ProgressionPolicy.xp(1, null, null, "DRAW", reason, seconds)).isEqualTo(50)
+                assertThat(ProgressionPolicy.xp(1, null, null, "ABANDONED", reason, seconds)).isZero()
+            }
+        }
+        assertThat(ProgressionPolicy.xp(1, 2, 1, "COMPLETED", "DISCONNECT", 30)).isZero()
+    }
+
+    @Test
+    fun `정상 종료와 항복 보상에는 최소 시간을 적용하지 않는다`() {
+        for (seconds in listOf<Long?>(null, 0, 29, 30)) {
+            assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", null, seconds)).isEqualTo(100)
+            assertThat(ProgressionPolicy.xp(1, 2, 1, "COMPLETED", null, seconds)).isEqualTo(25)
+            assertThat(ProgressionPolicy.xp(1, null, null, "DRAW", null, seconds)).isEqualTo(50)
+            assertThat(ProgressionPolicy.xp(1, 1, 2, "COMPLETED", "SURRENDER", seconds)).isEqualTo(100)
+        }
     }
 
     @Test

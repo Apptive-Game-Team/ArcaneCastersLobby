@@ -15,6 +15,7 @@ data class ProgressionMagic(val id: Long, val name: String)
 data class ProgressionMatch(
     val id: Long, val winner: Long?, val loser: Long?, val status: String, val reason: String?,
     val rankedEndDate: LocalDate?,
+    val durationSeconds: Long?,
 )
 
 @Repository
@@ -199,7 +200,7 @@ class ProgressionRepository(private val db: DatabaseClient) {
         }
     }
     suspend fun pendingMatches(userId: Long): List<ProgressionMatch> =
-        query("""SELECT s.id,g.win_user_id,g.loss_user_id,s.status,s.end_reason,
+        query("""SELECT s.id,g.win_user_id,g.loss_user_id,s.status,s.end_reason,g.duration,
             CASE WHEN s.game_type='PVP' THEN (s.ended_at AT TIME ZONE 'Asia/Seoul')::date END AS ranked_end_date
             FROM statistic_game_sessions s
             JOIN progression_matches p ON p.session_id=s.session_id AND p.user_id=:uid
@@ -212,7 +213,8 @@ class ProgressionRepository(private val db: DatabaseClient) {
               AND (g.id IS NOT NULL OR s.status='ABANDONED') ORDER BY s.ended_at,s.id""", "uid" to userId)
             .map { r, _ -> ProgressionMatch(r.long("id"), r.get("win_user_id", Number::class.java)?.toLong(),
                 r.get("loss_user_id", Number::class.java)?.toLong(), r.get("status", String::class.java)!!,
-                r.get("end_reason", String::class.java), r.get("ranked_end_date", LocalDate::class.java)) }.all().asFlow().toList()
+                r.get("end_reason", String::class.java), r.get("ranked_end_date", LocalDate::class.java),
+                r.get("duration", Number::class.java)?.toLong()) }.all().asFlow().toList()
 
     suspend fun hasRankedWinXp(userId: Long, date: LocalDate): Boolean =
         query("""SELECT EXISTS (
