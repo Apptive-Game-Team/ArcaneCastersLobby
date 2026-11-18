@@ -10,7 +10,6 @@ import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 
 @Slf4j
 @Component
@@ -18,7 +17,6 @@ import java.time.Duration;
 public class SessionRecoveryStore {
 
     private static final String KEY_PREFIX = "matching:result:";
-    private static final Duration TTL = Duration.ofMinutes(5);
 
     private final ReactiveStringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -52,6 +50,6 @@ public class SessionRecoveryStore {
 
     private Mono<Boolean> storeForUser(Long userId, String json) {
         if (userId == null || userId < 0) return Mono.just(true);
-        return redisTemplate.opsForValue().set(KEY_PREFIX + userId, json, TTL);
+        return redisTemplate.opsForValue().set(KEY_PREFIX + userId, json, SessionRecoveryInfo.TTL);
     }
 }

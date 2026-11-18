@@ -120,4 +120,30 @@ class UserServiceAppearanceTest {
 
         org.junit.jupiter.api.Assertions.assertNull(dto.appearance());
     }
+
+    @Test
+    void matchingDetailCarriesActualMmrIncludingZero() {
+        when(accountClient.getMember(5L))
+                .thenReturn(Mono.just(new AccountMemberResponseDto("human@example.com", "human")));
+        when(userRepository.findById(5L))
+                .thenReturn(Mono.just(new User(5L, UserStatus.Online, null, 0, 1234L, null, "default")));
+        StepVerifier.create(userService.getUserDetail(5L))
+                .expectNextMatches(detail -> Long.valueOf(1234).equals(detail.matchMmr()))
+                .verifyComplete();
+        when(userRepository.findById(5L))
+                .thenReturn(Mono.just(new User(5L, UserStatus.Online, null, 0, 0L, null, "default")));
+        StepVerifier.create(userService.getUserDetail(5L))
+                .expectNextMatches(detail -> Long.valueOf(0).equals(detail.matchMmr()))
+                .verifyComplete();
+    }
+
+    @Test
+    void missingMmrIsNotInventedAsZero() {
+        when(accountClient.getMember(5L))
+                .thenReturn(Mono.just(new AccountMemberResponseDto("human@example.com", "human")));
+        when(userRepository.findById(5L)).thenReturn(Mono.just(userWithAppearance(5L, null)));
+        StepVerifier.create(userService.getUserDetail(5L))
+                .expectNextMatches(detail -> detail.matchMmr() == null)
+                .verifyComplete();
+    }
 }

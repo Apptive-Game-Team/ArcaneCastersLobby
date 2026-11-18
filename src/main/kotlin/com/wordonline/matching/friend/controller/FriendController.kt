@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -101,16 +102,18 @@ class FriendController(
     suspend fun inviteFriend(
         @UserId userId: Long?,
         @PathVariable friendId: Long,
+        @RequestHeader(name = "X-Game-Start-Protocol", defaultValue = "0") startProtocolVersion: Int = 0,
     ): FriendInviteDto {
-        return friendInviteService.invite(userId!!, friendId)
+        return friendInviteService.invite(userId!!, friendId, startProtocolVersion)
     }
 
     @PostMapping("/invites/{inviteId}/accept")
     suspend fun acceptInvite(
         @UserId userId: Long?,
         @PathVariable inviteId: String,
+        @RequestHeader(name = "X-Game-Start-Protocol", defaultValue = "0") startProtocolVersion: Int = 0,
     ): MatchedInfoDto {
-        return friendInviteService.acceptInvite(userId!!, inviteId)
+        return friendInviteService.acceptInvite(userId!!, inviteId, startProtocolVersion)
     }
 
     @PostMapping("/invites/{inviteId}/reject")

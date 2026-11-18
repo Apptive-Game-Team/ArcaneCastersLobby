@@ -15,6 +15,7 @@ data class FriendInvite(
     val matchInfo: MatchedInfoDto? = null,
     val deliveredAt: Instant? = null,
     val revision: Long = 1,
+    val startProtocolVersion: Int = 0,
 )
 
 enum class FriendInviteStatus {

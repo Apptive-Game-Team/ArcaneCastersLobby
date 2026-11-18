@@ -21,6 +21,14 @@ class GameServerContractTest {
 
     private val objectMapper: ObjectMapper = Jackson2ObjectMapperBuilder.json().build()
 
+    @Test
+    fun `준비 프로토콜은 요청한 세션에만 직렬화한다`() {
+        val request = CreateSessionRequest("attempt-1", SessionDto.PVP("session-1", 1L, 2L).copy(startProtocolVersion = 1))
+        assertThat(objectMapper.readTree(objectMapper.writeValueAsString(request))["startProtocolVersion"].asInt()).isEqualTo(1)
+        val legacy = objectMapper.readValue(fixture("session-ready-response.json"), SessionReadyResponse::class.java)
+        assertThat(legacy.startProtocolVersion).isZero()
+    }
+
     private fun fixture(name: String): String =
         checkNotNull(javaClass.getResourceAsStream("/contract/$name")) { "missing fixture: $name" }
             .bufferedReader()

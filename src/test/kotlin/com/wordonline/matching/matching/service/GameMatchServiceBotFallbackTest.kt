@@ -99,6 +99,25 @@ class GameMatchServiceBotFallbackTest {
     }
 
     @Test
+    fun `새 클라이언트의 준비 프로토콜을 연습과 bot fallback에 전달한다`() = runTest {
+        stubRound(listOf(ticket(1L, waitedSeconds = 30).copy(startProtocolVersion = 1)))
+        service.runMatchingRound()
+        val session = argumentCaptor<SessionDto>()
+        verify(legacyGameMatchService).createSession(session.capture(), any(), any())
+        assertThat(session.firstValue.startProtocolVersion).isEqualTo(1)
+    }
+
+    @Test
+    fun `연습 시작 요청의 지원 버전을 전달한다`() = runTest {
+        stubRound(emptyList())
+        whenever(opponents.select(1L)).thenReturn(PracticeOpponent(-7L, false))
+        service.matchPractice(1L, startProtocolVersion = 1)
+        val session = argumentCaptor<SessionDto>()
+        verify(legacyGameMatchService).createSession(session.capture(), any(), any())
+        assertThat(session.firstValue.startProtocolVersion).isEqualTo(1)
+    }
+
+    @Test
     fun `빈 선택 덱은 세션 번호를 발급하지 않는다`() = runTest {
         whenever(decks.validSelectedDeckCards(1L)).thenReturn(Mono.empty())
         assertThat(service.matchSelectedPractice(1L, -7L, null, MatchDeckMode.SELECTED)).isNull()

@@ -13,6 +13,7 @@ data class MatchedInfoDto @JvmOverloads constructor(
     /** Map kind the game server chose, passed through unvalidated. `null` from a game server that predates it. */
     val mapType: String? = null,
     val type: String = "matchedInfoDto",
+    val startProtocolVersion: Int = 0,
 ) {
     constructor(
         sessionInfo: SessionRecoveryInfo,
@@ -26,5 +27,6 @@ data class MatchedInfoDto @JvmOverloads constructor(
         sessionId = sessionInfo.sessionId(),
         webSocketUrl = null,
         mapType = sessionInfo.mapType(),
+        startProtocolVersion = sessionInfo.startProtocolVersion(),
     )
 }

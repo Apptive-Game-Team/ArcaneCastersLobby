@@ -32,7 +32,7 @@ class FriendInviteService(
     private val log = LoggerFactory.getLogger(javaClass)
     private val invites = ConcurrentHashMap<String, FriendInvite>()
 
-    suspend fun invite(inviterId: Long, friendId: Long): FriendInviteDto {
+    suspend fun invite(inviterId: Long, friendId: Long, startProtocolVersion: Int = 0): FriendInviteDto {
         if (!friendRepository.existsByUserIdAndFriendId(inviterId, friendId)) {
             throw IllegalStateException("User $friendId is not your friend")
         }
@@ -69,6 +69,7 @@ class FriendInviteService(
         val now = Instant.now()
         val invite = FriendInvite(
             inviteId = inviteId,
+            startProtocolVersion = com.wordonline.matching.matching.service.supportedStartProtocol(startProtocolVersion),
             inviterId = inviterId,
             inviterName = inviter.displayName,
             inviteeId = friendId,
@@ -100,7 +101,7 @@ class FriendInviteService(
         return dto
     }
 
-    suspend fun acceptInvite(inviteeId: Long, inviteId: String): MatchedInfoDto {
+    suspend fun acceptInvite(inviteeId: Long, inviteId: String, startProtocolVersion: Int = 0): MatchedInfoDto {
         val invite = invites[inviteId]
             ?: throw IllegalArgumentException("Invite not found: $inviteId")
 
@@ -118,7 +119,7 @@ class FriendInviteService(
         }
 
         val sessionId = "friend-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-        val sessionDto = SessionDto.PVP(sessionId, invite.inviterId, invite.inviteeId)
+        val sessionDto = SessionDto.PVP(sessionId, invite.inviterId, invite.inviteeId).copy(startProtocolVersion = minOf(invite.startProtocolVersion, com.wordonline.matching.matching.service.supportedStartProtocol(startProtocolVersion)))
         val placement = legacyGameMatchService.createSession(sessionDto)
         val matchInfo = placement.matchInfo
 
