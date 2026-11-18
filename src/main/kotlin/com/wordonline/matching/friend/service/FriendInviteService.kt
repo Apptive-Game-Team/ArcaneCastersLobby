@@ -11,6 +11,7 @@ import com.wordonline.matching.matching.client.AccountClient
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.SessionDto
 import com.wordonline.matching.matching.repository.MatchingQueueRepository
+import com.wordonline.matching.matching.service.supportedStartProtocol
 import com.wordonline.matching.session.service.LegacyGameMatchService
 import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
@@ -69,7 +70,7 @@ class FriendInviteService(
         val now = Instant.now()
         val invite = FriendInvite(
             inviteId = inviteId,
-            startProtocolVersion = com.wordonline.matching.matching.service.supportedStartProtocol(startProtocolVersion),
+            startProtocolVersion = supportedStartProtocol(startProtocolVersion),
             inviterId = inviterId,
             inviterName = inviter.displayName,
             inviteeId = friendId,
@@ -119,7 +120,9 @@ class FriendInviteService(
         }
 
         val sessionId = "friend-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-        val sessionDto = SessionDto.PVP(sessionId, invite.inviterId, invite.inviteeId).copy(startProtocolVersion = minOf(invite.startProtocolVersion, com.wordonline.matching.matching.service.supportedStartProtocol(startProtocolVersion)))
+        val negotiatedVersion = minOf(invite.startProtocolVersion, supportedStartProtocol(startProtocolVersion))
+        val sessionDto = SessionDto.PVP(sessionId, invite.inviterId, invite.inviteeId)
+            .copy(startProtocolVersion = negotiatedVersion)
         val placement = legacyGameMatchService.createSession(sessionDto)
         val matchInfo = placement.matchInfo
 

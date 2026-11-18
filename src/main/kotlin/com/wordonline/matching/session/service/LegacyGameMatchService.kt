@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service
 import com.wordonline.matching.matching.service.LearnedBotAvailability
 import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Mono
+import java.time.Duration
 import java.util.Locale
 import java.util.UUID
 
@@ -167,7 +168,7 @@ class LegacyGameMatchService(
             val support = webClientBuilder.clone().baseUrl(url).build()
                 .get().uri("/api/server/game-sessions/start-protocol")
                 .retrieve().bodyToMono(StartProtocolSupport::class.java)
-                .timeout(java.time.Duration.ofSeconds(10)).awaitSingle()
+                .timeout(Duration.ofSeconds(10)).awaitSingle()
             check(support.startProtocolVersion == 1) { "start protocol unavailable" }
         }
         if (!learnedBots.permits(url, listOfNotNull(sessionDto.uid1, sessionDto.uid2))) {

@@ -25,6 +25,7 @@ import org.springframework.security.test.web.reactive.server.SecurityMockServerC
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.reactive.server.WebTestClient
 import reactor.core.publisher.Flux
+import java.time.Duration
 
 @WebFluxTest(PracticeDifficultyController::class)
 @Import(UserIdResolver::class, PracticeDifficultyService::class)
@@ -35,7 +36,7 @@ class PracticeDifficultyControllerTest {
     @MockitoBean private lateinit var history: PracticeHistoryRepository
     @MockitoBean private lateinit var learned: LearnedBotAvailability
     private val path = "/api/match/practice/difficulties"
-    private fun client() = web.mutate().responseTimeout(java.time.Duration.ofSeconds(20)).build()
+    private fun client() = web.mutate().responseTimeout(Duration.ofSeconds(20)).build()
         .mutateWith(mockJwt().jwt { it.claim("memberId", 7L) }).mutateWith(csrf())
 
     @Test
