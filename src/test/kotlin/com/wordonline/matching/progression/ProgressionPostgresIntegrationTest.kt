@@ -28,7 +28,7 @@ class ProgressionPostgresIntegrationTest {
 
     @BeforeAll
     fun setup(): Unit = runBlocking {
-        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 125)
+        val factory = MigratedPostgresDatabase.build("progression_rewards_it", 126)
         db = DatabaseClient.create(factory)
         repository = ProgressionRepository(db)
         transaction = TransactionalOperator.create(R2dbcTransactionManager(factory))
@@ -42,6 +42,30 @@ class ProgressionPostgresIntegrationTest {
     private suspend fun exec(sql: String) { db.sql(sql).fetch().rowsUpdated().awaitSingle() }
     private suspend fun number(sql: String): Long = db.sql(sql).map { r, _ -> r.get(0, Number::class.java)!!.toLong() }.one().awaitSingle()
     private fun chests() = ChestService(ChestRepository(db), QuestRegistry(emptyList(), emptyList()), transaction, repository, service)
+
+    @Test
+    fun `불차원 외형을 한 번 지급하고 재선택 시 장착 외형을 보존한다`(): Unit = runBlocking {
+        val alreadyCustomized = user + 100000
+        val nature = user + 200000
+        exec("INSERT INTO users(id, appearance) VALUES ($alreadyCustomized, 'blaze'), ($nature, 'default')")
+
+        listOf(async { service.choose(user, "HELL") }, async { service.choose(user, "HELL") }).awaitAll()
+        service.choose(alreadyCustomized, "HELL")
+        service.choose(nature, "NATURE")
+
+        assertThat(number("""
+            SELECT count(*) FROM user_appearances ua JOIN appearances a ON a.id = ua.appearance_id
+            WHERE a.key = 'corrupted_finn' AND ua.user_id IN ($user, $alreadyCustomized)
+        """)).isEqualTo(2)
+        assertThat(number("SELECT count(*) FROM user_appearances WHERE user_id = $nature")).isZero()
+        assertThat(number("SELECT count(*) FROM users WHERE id = $user AND appearance = 'corrupted_finn'")).isEqualTo(1)
+        assertThat(number("SELECT count(*) FROM users WHERE id = $alreadyCustomized AND appearance = 'blaze'")).isEqualTo(1)
+        assertThat(number("SELECT count(*) FROM users WHERE id = $nature AND appearance = 'default'")).isEqualTo(1)
+
+        exec("UPDATE users SET appearance = 'default' WHERE id = $user")
+        service.choose(user, "HELL")
+        assertThat(number("SELECT count(*) FROM users WHERE id = $user AND appearance = 'default'")).isEqualTo(1)
+    }
 
     @Test
     fun `등록된 매칭과 연습만 반영하고 친선전과 PvE와 관리자 대전은 제외한다`(): Unit = runBlocking {
@@ -96,6 +120,37 @@ class ProgressionPostgresIntegrationTest {
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(4)
         assertThat(number("SELECT COUNT(*) FROM user_chests WHERE user_id=$user AND reward_source LIKE 'level:%'")).isEqualTo(5)
         assertThat(number("SELECT count FROM user_magics WHERE user_id=$user AND magic_id=(SELECT id FROM magics WHERE name='ember_spirit_swarm')")).isEqualTo(2)
+    }
+
+    @Test
+    fun `오류와 이탈 경기의 기록된 플레이 시간으로 XP와 첫 승 보너스를 제한한다`(): Unit = runBlocking {
+        service.choose(user, "HELL")
+        for (reason in listOf("LOOP_FAILURE", "DISCONNECT")) {
+            for (seconds in listOf(29, 30)) {
+                val suffix = "$reason-$seconds"
+                practiceResult(suffix, "DRAW", null, null, reason)
+                exec("""UPDATE statistic_games SET duration=$seconds WHERE id=(
+                    SELECT statistic_game_id FROM statistic_game_sessions WHERE session_id='$user-$suffix')""")
+            }
+        }
+        practiceResult("normal-short", "DRAW", null, null)
+        exec("""UPDATE statistic_games SET duration=1 WHERE id=(
+            SELECT statistic_game_id FROM statistic_game_sessions WHERE session_id='$user-normal-short')""")
+        assertThat(service.sync(user).gainedXp).isEqualTo(150)
+        assertThat(service.sync(user).gainedXp).isZero()
+        assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(2)
+
+        for (seconds in listOf(29, 30)) {
+            val sid = "$user-interrupted-win-$seconds"
+            repository.registerMatch(sid, user)
+            val gameId = number("""INSERT INTO statistic_games(win_user_id,loss_user_id,duration,game_type,server_version,event_schema_version)
+                VALUES ($user,-7,$seconds,'PVP','test',1) RETURNING id""")
+            exec("""INSERT INTO statistic_game_sessions(session_id,left_user_id,right_user_id,game_type,server_domain,server_port,
+                server_instance_id,server_version,status,end_reason,statistic_game_id,ended_at)
+                VALUES ('$sid',$user,-7,'PVP','localhost',1,'test','test','COMPLETED','DISCONNECT',$gameId,now())""")
+            val result = service.syncMatch(user, true, sid)
+            assertThat(result.matchXp).isEqualTo(if (seconds == 29) ProgressionMatchXp(0, 0) else ProgressionMatchXp(100, 25))
+        }
     }
 
     @Test
@@ -169,7 +224,7 @@ class ProgressionPostgresIntegrationTest {
         }
         assertThat(service.sync(user).xp).isZero()
         assertThat(number("SELECT COUNT(*) FROM progression_match_rewards WHERE user_id=$user AND xp=0")).isEqualTo(2)
-        assertThat(ProgressionPolicy.xp(0, 0, user, "COMPLETED", "SURRENDER")).isEqualTo(100)
+        assertThat(ProgressionPolicy.xp(0, 0, user, "COMPLETED", "SURRENDER", 180)).isEqualTo(100)
     }
 
     @Test

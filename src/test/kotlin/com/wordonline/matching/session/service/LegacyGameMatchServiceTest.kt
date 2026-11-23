@@ -14,6 +14,7 @@ import com.wordonline.matching.session.domain.SessionRecoveryInfo
 import kotlinx.coroutines.test.runTest
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
@@ -89,6 +90,41 @@ class LegacyGameMatchServiceTest {
     }
 
     private val sessionDto = SessionDto.PVP("session-1", 1L, 2L)
+
+    @Test
+    fun `준비 프로토콜을 생성 전에 확인하고 매칭과 복구에 보존한다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+        val preparedService = service { request ->
+            if (request.url().path.endsWith("/start-protocol")) {
+                ClientResponse.create(HttpStatus.OK).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .body("""{"startProtocolVersion":1}""").build()
+            } else {
+                ClientResponse.create(HttpStatus.OK).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .body("""{"attemptId":"attempt-1","sessionId":"session-1","ready":true,"serverUrl":"http://alpha:9090","webSocketUrl":"ws://alpha:9090/ws","startProtocolVersion":1}""").build()
+            }
+        }
+        val placement = preparedService.createSession(sessionDto.copy(startProtocolVersion = 1), "attempt-1")
+        assertThat(sentRequests.map { it.method().name() }).containsExactly("GET", "POST")
+        assertThat(placement.matchInfo.startProtocolVersion).isEqualTo(1)
+        val recovery = SessionRecoveryInfo(placement.matchInfo)
+        assertThat(recovery.startProtocolVersion()).isEqualTo(1)
+        assertThat(recovery.expireAt() - System.currentTimeMillis()).isGreaterThan(20 * 60 * 1000L)
+        whenever(sessionRecoveryStore.getSessionInfo(1L)).thenReturn(Mono.just(recovery))
+        assertThat(service { booleanResponse(true) }.getMatchInfo(1L).startProtocolVersion).isEqualTo(1)
+    }
+
+    @Test
+    fun `구버전 서버에는 준비 세션 생성 요청을 보내지 않는다`() = runTest {
+        stubUsers()
+        whenever(gameServerManagementService.getAvailableServers()).thenReturn(listOf(server(1L, "alpha")))
+        val service = service { ClientResponse.create(HttpStatus.NOT_FOUND).build() }
+        assertThrows<NoAvailableGameServerException> {
+            service.createSession(sessionDto.copy(startProtocolVersion = 1), "attempt-1")
+        }
+        assertThat(sentRequests).hasSize(1)
+        assertThat(sentRequests.single().method().name()).isEqualTo("GET")
+    }
 
     private fun modelsOnServers(models: Map<String, String>) {
         val file = directory.resolve("game-config.json")

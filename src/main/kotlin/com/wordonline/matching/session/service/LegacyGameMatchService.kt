@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service
 import com.wordonline.matching.matching.service.LearnedBotAvailability
 import org.springframework.web.reactive.function.client.WebClient
 import reactor.core.publisher.Mono
+import java.time.Duration
 import java.util.Locale
 import java.util.UUID
 
@@ -92,6 +93,7 @@ class LegacyGameMatchService(
                 sessionDto.sessionId,
                 ready.webSocketUrl,
                 ready.mapType,
+                startProtocolVersion = ready.startProtocolVersion,
             )
             sessionRecoveryStore.storeMatchInfo(matchedInfo).awaitSingleOrNull()
             return SessionPlacement(matchedInfo, server.id, ready.instanceId)
@@ -152,7 +154,7 @@ class LegacyGameMatchService(
             }
         }
 
-        return if (!response.ready || response.attemptId != attemptId || response.sessionId != sessionDto.sessionId) {
+        return if (!response.ready || response.attemptId != attemptId || response.sessionId != sessionDto.sessionId || response.startProtocolVersion != sessionDto.startProtocolVersion) {
             log.warn("Game server {} returned invalid readiness for session {}", callUrl, sessionDto.sessionId)
             null
         } else {
@@ -161,6 +163,14 @@ class LegacyGameMatchService(
     }
 
     private suspend fun requestSession(url: String, sessionDto: SessionDto, attemptId: String): SessionReadyResponse {
+        if (sessionDto.startProtocolVersion == 1) {
+            // 구버전 서버가 새 필드를 무시한 채 경기를 시작하지 않도록 생성 전에 확인한다.
+            val support = webClientBuilder.clone().baseUrl(url).build()
+                .get().uri("/api/server/game-sessions/start-protocol")
+                .retrieve().bodyToMono(StartProtocolSupport::class.java)
+                .timeout(Duration.ofSeconds(10)).awaitSingle()
+            check(support.startProtocolVersion == 1) { "start protocol unavailable" }
+        }
         if (!learnedBots.permits(url, listOfNotNull(sessionDto.uid1, sessionDto.uid2))) {
             throw IllegalStateException("learned bot model unavailable")
         }
@@ -236,3 +246,5 @@ class LegacyGameMatchService(
         return localizationService.getMessage(localeContext, code)
     }
 }
+
+data class StartProtocolSupport(val startProtocolVersion: Int = 0)

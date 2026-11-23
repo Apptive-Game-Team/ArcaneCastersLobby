@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 import reactor.core.publisher.Mono
 
@@ -30,7 +31,9 @@ class AdventureController(
         @UserId userId: Long?,
         @PathVariable scenarioId: Long,
         @RequestParam(required = false) pings: String?,
+        @RequestHeader(name = "X-Game-Start-Protocol", defaultValue = "0") startProtocolVersion: Int = 0,
+
     ): MatchedInfoDto {
-        return gameMatchService.matchPVE(userId!!, scenarioId, GameServerPingSelector.parse(pings))
+        return gameMatchService.matchPVE(userId!!, scenarioId, GameServerPingSelector.parse(pings), startProtocolVersion)
     }
 }

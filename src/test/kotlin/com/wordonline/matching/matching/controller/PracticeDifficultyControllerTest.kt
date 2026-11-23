@@ -25,6 +25,7 @@ import org.springframework.security.test.web.reactive.server.SecurityMockServerC
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.reactive.server.WebTestClient
 import reactor.core.publisher.Flux
+import java.time.Duration
 
 @WebFluxTest(PracticeDifficultyController::class)
 @Import(UserIdResolver::class, PracticeDifficultyService::class)
@@ -35,7 +36,23 @@ class PracticeDifficultyControllerTest {
     @MockitoBean private lateinit var history: PracticeHistoryRepository
     @MockitoBean private lateinit var learned: LearnedBotAvailability
     private val path = "/api/match/practice/difficulties"
-    private fun client() = web.mutateWith(mockJwt().jwt { it.claim("memberId", 7L) }).mutateWith(csrf())
+    private fun client() = web.mutate().responseTimeout(Duration.ofSeconds(20)).build()
+        .mutateWith(mockJwt().jwt { it.claim("memberId", 7L) }).mutateWith(csrf())
+
+    @Test
+    fun `지원 header를 연습 세션 생성에 전달한다`() = runTest {
+        whenever(learned.unavailableBotIds()).thenReturn(emptyList())
+        whenever(bots.findMatchableByUserIds(PracticeDifficulty.SKILLED.botIds))
+            .thenReturn(Flux.just(BotPersona(-60, "Golem Architect", true)))
+        val player = UserDetailResponseDto(7L, "player", "")
+        val opponent = UserDetailResponseDto(-60L, "Golem Architect", "")
+        whenever(matches.matchSelectedPractice(7L, -60L, null, MatchDeckMode.SELECTED, 1)).thenReturn(
+            MatchedInfoDto("matched", "test", player, opponent, "bot-123", startProtocolVersion = 1),
+        )
+        client().post().uri("$path/SKILLED").header("X-Game-Start-Protocol", "1")
+            .exchange().expectStatus().isOk.expectBody().jsonPath("$.startProtocolVersion").isEqualTo(1)
+        verify(matches).matchSelectedPractice(7L, -60L, null, MatchDeckMode.SELECTED, 1)
+    }
 
     @Test
     fun `랜덤 덱을 만들 수 없으면 422를 반환한다`() = runTest {

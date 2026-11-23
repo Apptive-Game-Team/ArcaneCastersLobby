@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.bind.annotation.RequestBody
 
@@ -41,8 +42,10 @@ class MatchingController(
     suspend fun matchPractice(
         @UserId userId: Long?,
         @RequestParam(required = false) pings: String?,
+        @RequestHeader(name = "X-Game-Start-Protocol", defaultValue = "0") startProtocolVersion: Int = 0,
+
     ): MatchedInfoDto {
-        return gameMatchService.matchPractice(userId!!, GameServerPingSelector.parse(pings))
+        return gameMatchService.matchPractice(userId!!, GameServerPingSelector.parse(pings), startProtocolVersion)
     }
 
     @GetMapping("/api/match/queue/me")
@@ -54,11 +57,14 @@ class MatchingController(
     suspend fun createTicket(
         @UserId userId: Long?,
         @RequestBody(required = false) request: MatchTicketRequest?,
+        @RequestHeader(name = "X-Game-Start-Protocol", defaultValue = "0") startProtocolVersion: Int = 0,
+
     ): MatchTicketResponse = MatchTicketResponse.from(
         gameMatchService.createTicket(
             userId!!,
             request?.deckMode ?: MatchTicketRequest().deckMode,
             request?.serverPings,
+            startProtocolVersion,
         ),
     )
 

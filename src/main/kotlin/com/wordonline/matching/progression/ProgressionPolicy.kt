@@ -19,6 +19,7 @@ object ProgressionPolicy {
     const val MAX_LEVEL = 50
     const val WIN_XP = 100
     const val FIRST_WIN_XP = 25
+    const val MIN_INTERRUPTED_MATCH_SECONDS = 30L
 
     fun cost(level: Int): Int = when {
         level in 1..9 -> 60 + (level - 1) * 10
@@ -33,8 +34,10 @@ object ProgressionPolicy {
         level % 5 == 0 -> 6
         else -> 3
     }
-    fun xp(userId: Long, winner: Long?, loser: Long?, status: String, reason: String?): Int = when {
+    fun xp(userId: Long, winner: Long?, loser: Long?, status: String, reason: String?, durationSeconds: Long?): Int = when {
         status == "ABANDONED" -> 0
+        reason in setOf("LOOP_FAILURE", "DISCONNECT") &&
+            (durationSeconds == null || durationSeconds < MIN_INTERRUPTED_MATCH_SECONDS) -> 0
         winner == userId -> WIN_XP
         loser == userId && reason in setOf("SURRENDER", "DISCONNECT", "FORFEIT") -> 0
         loser == userId -> 25

@@ -53,6 +53,7 @@ data class MatchTicket(
      * before this field existed decode as `false`.
      */
     val cancelRequested: Boolean = false,
+    val startProtocolVersion: Int = 0,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {

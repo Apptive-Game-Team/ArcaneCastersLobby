@@ -57,13 +57,13 @@ class GameMatchService(
     }
     private val scope = CoroutineScope(Dispatchers.Default + exceptionHandler)
 
-    suspend fun matchPractice(userId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
+    suspend fun matchPractice(userId: Long, pings: Map<Long, Long>? = null, startProtocolVersion: Int = 0): MatchedInfoDto {
         val botId = practiceOpponentSelector.select(userId).botId
-        return createPracticeSession(userId, botId, pings, null)
+        return createPracticeSession(userId, botId, pings, null, startProtocolVersion)
     }
 
     suspend fun matchSelectedPractice(
-        userId: Long, botId: Long, pings: Map<Long, Long>?, deckMode: MatchDeckMode,
+        userId: Long, botId: Long, pings: Map<Long, Long>?, deckMode: MatchDeckMode, startProtocolVersion: Int = 0,
     ): MatchedInfoDto? {
         val cards = when (deckMode) {
             MatchDeckMode.SELECTED -> deckService.validSelectedDeckCards(userId).awaitSingleOrNull() ?: return null
@@ -74,15 +74,15 @@ class GameMatchService(
                 throw e
             }
         }
-        return createPracticeSession(userId, botId, pings, cards)
+        return createPracticeSession(userId, botId, pings, cards, startProtocolVersion)
     }
 
     private suspend fun createPracticeSession(
-        userId: Long, botId: Long, pings: Map<Long, Long>?, cards: List<Long>?,
+        userId: Long, botId: Long, pings: Map<Long, Long>?, cards: List<Long>?, startProtocolVersion: Int,
     ): MatchedInfoDto {
         val matchRequestedAt = Instant.now(clock)
         val sessionId = "bot-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-        val sessionDto = SessionDto.Practice(sessionId, userId, botId, cards)
+        val sessionDto = SessionDto.Practice(sessionId, userId, botId, cards).copy(startProtocolVersion = supportedStartProtocol(startProtocolVersion))
         val placement = legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings))
         progressionRepository.registerMatch(sessionId, userId, matchRequestedAt = matchRequestedAt)
         return placement.matchInfo
@@ -94,9 +94,9 @@ class GameMatchService(
         return legacyGameMatchService.createSession(sessionDto).matchInfo
     }
 
-    suspend fun matchPVE(userId: Long, scenarioId: Long, pings: Map<Long, Long>? = null): MatchedInfoDto {
+    suspend fun matchPVE(userId: Long, scenarioId: Long, pings: Map<Long, Long>? = null, startProtocolVersion: Int = 0): MatchedInfoDto {
         val sessionId = "pve-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-        val sessionDto = SessionDto.PVE(sessionId, userId, scenarioId)
+        val sessionDto = SessionDto.PVE(sessionId, userId, scenarioId).copy(startProtocolVersion = supportedStartProtocol(startProtocolVersion))
         return legacyGameMatchService.createSession(sessionDto, participantPings = listOfNotNull(pings)).matchInfo
     }
 
@@ -108,10 +108,10 @@ class GameMatchService(
         return SimpleMessageDto("Successfully Enqueued")
     }
 
-    suspend fun createTicket(userId: Long, deckMode: MatchDeckMode, serverPings: List<ServerPingDto>? = null): MatchTicket =
-        enqueue(userId, deckMode, serverPings) ?: throw IllegalStateException("Failed to enqueue user")
+    suspend fun createTicket(userId: Long, deckMode: MatchDeckMode, serverPings: List<ServerPingDto>? = null, startProtocolVersion: Int = 0): MatchTicket =
+        enqueue(userId, deckMode, serverPings, startProtocolVersion) ?: throw IllegalStateException("Failed to enqueue user")
 
-    private suspend fun enqueue(userId: Long, deckMode: MatchDeckMode, serverPings: List<ServerPingDto>? = null): MatchTicket? {
+    private suspend fun enqueue(userId: Long, deckMode: MatchDeckMode, serverPings: List<ServerPingDto>? = null, startProtocolVersion: Int = 0): MatchTicket? {
         return try {
             val deckCardIds = when (deckMode) {
                 MatchDeckMode.SELECTED -> {
@@ -130,6 +130,7 @@ class GameMatchService(
                     MatchTicketState.QUEUED,
                     1,
                     deckCardIds = deckCardIds,
+                    startProtocolVersion = supportedStartProtocol(startProtocolVersion),
                     serverPings = GameServerPingSelector.sanitize(serverPings?.associate { it.serverId to it.rttMs }),
                     createdAt = now,
                     updatedAt = now,
@@ -219,7 +220,7 @@ class GameMatchService(
             uid2,
             first.deckCardIds,
             second.deckCardIds,
-        )
+        ).copy(startProtocolVersion = minOf(first.startProtocolVersion, second.startProtocolVersion))
 
         try {
             progressionRepository.registerMatch(sessionId, uid1)
@@ -300,7 +301,7 @@ class GameMatchService(
             if (!matchTicketRepository.claim(claiming)) return
 
             val sessionId = "session-${matchingQueueRepository.nextSessionId().awaitSingle()}"
-            val sessionDto = SessionDto.PVP(sessionId, ticket.userId, botId, claiming.deckCardIds, null)
+            val sessionDto = SessionDto.PVP(sessionId, ticket.userId, botId, claiming.deckCardIds, null).copy(startProtocolVersion = claiming.startProtocolVersion)
             try {
                 progressionRepository.registerMatch(sessionId, ticket.userId)
                 val placement = legacyGameMatchService.createSession(

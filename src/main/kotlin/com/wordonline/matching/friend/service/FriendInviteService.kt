@@ -11,6 +11,7 @@ import com.wordonline.matching.matching.client.AccountClient
 import com.wordonline.matching.matching.dto.MatchedInfoDto
 import com.wordonline.matching.matching.dto.SessionDto
 import com.wordonline.matching.matching.repository.MatchingQueueRepository
+import com.wordonline.matching.matching.service.supportedStartProtocol
 import com.wordonline.matching.session.service.LegacyGameMatchService
 import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
@@ -32,7 +33,7 @@ class FriendInviteService(
     private val log = LoggerFactory.getLogger(javaClass)
     private val invites = ConcurrentHashMap<String, FriendInvite>()
 
-    suspend fun invite(inviterId: Long, friendId: Long): FriendInviteDto {
+    suspend fun invite(inviterId: Long, friendId: Long, startProtocolVersion: Int = 0): FriendInviteDto {
         if (!friendRepository.existsByUserIdAndFriendId(inviterId, friendId)) {
             throw IllegalStateException("User $friendId is not your friend")
         }
@@ -69,6 +70,7 @@ class FriendInviteService(
         val now = Instant.now()
         val invite = FriendInvite(
             inviteId = inviteId,
+            startProtocolVersion = supportedStartProtocol(startProtocolVersion),
             inviterId = inviterId,
             inviterName = inviter.displayName,
             inviteeId = friendId,
@@ -100,7 +102,7 @@ class FriendInviteService(
         return dto
     }
 
-    suspend fun acceptInvite(inviteeId: Long, inviteId: String): MatchedInfoDto {
+    suspend fun acceptInvite(inviteeId: Long, inviteId: String, startProtocolVersion: Int = 0): MatchedInfoDto {
         val invite = invites[inviteId]
             ?: throw IllegalArgumentException("Invite not found: $inviteId")
 
@@ -118,7 +120,9 @@ class FriendInviteService(
         }
 
         val sessionId = "friend-${matchingQueueRepository.nextSessionId().awaitSingle()}"
+        val negotiatedVersion = minOf(invite.startProtocolVersion, supportedStartProtocol(startProtocolVersion))
         val sessionDto = SessionDto.PVP(sessionId, invite.inviterId, invite.inviteeId)
+            .copy(startProtocolVersion = negotiatedVersion)
         val placement = legacyGameMatchService.createSession(sessionDto)
         val matchInfo = placement.matchInfo
 

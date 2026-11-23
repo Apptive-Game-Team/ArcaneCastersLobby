@@ -43,6 +43,7 @@ class ProgressionService(
             repository.choose(userId, faction)
             magics.forEach { repository.grantMagic(userId, it.id, 3) }
             repository.createStarterDeck(userId, faction)
+            if (faction == "HELL") repository.grantStarterAppearance(userId, "corrupted_finn")
         }
         syncLocked(userId, state.copy(faction = faction), manualClaims)
     }
@@ -99,7 +100,7 @@ class ProgressionService(
         var chests = 0
         if (state.faction != null) {
             repository.pendingMatches(userId).forEach { match ->
-                val baseXp = ProgressionPolicy.xp(userId, match.winner, match.loser, match.status, match.reason)
+                val baseXp = ProgressionPolicy.xp(userId, match.winner, match.loser, match.status, match.reason, match.durationSeconds)
                 val date = match.rankedEndDate
                 val bonus = if (baseXp == ProgressionPolicy.WIN_XP && date != null && !repository.hasRankedWinXp(userId, date)) {
                     ProgressionPolicy.FIRST_WIN_XP
